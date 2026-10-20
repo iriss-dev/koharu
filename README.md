@@ -38,9 +38,23 @@
 
 Koharu eliminates messy role permissions by giving administrators complete control over automated role creation and hierarchy positioning.
 
-<div align="center">
-  <img src="assets/rolepanel_preview.png" alt="Role Management Panel Preview" width="600px" style="border-radius: 8px; border: 1px solid #F472B6;" />
-</div>
+```text
+┌─────────────────────────────────────────────────────────────────────────────┐
+│ 🌸 Koharu [APP]                                                             │
+│ ┌─────────────────────────────────────────────────────────────────────────┐ │
+│ │ 🎨 Custom Role Management                                               │ │
+│ │                                                                         │ │
+│ │ Manage your personalized role with our server's role features. Create,  │ │
+│ │ customize, and maintain your role identity directly from this panel.   │ │
+│ │                                                                         │ │
+│ │ 🪙 Cost per Role:                      ❓ How it Works:                 │ │
+│ │ • Coins: 25,000 coins                  1. Click [ Configure Role ]      │ │
+│ │ • Event Keys: 1 🔑                      2. Enter role name & hex color   │ │
+│ │ • Boosters: 100% Free ✨               3. Role is created & synced!     │ │
+│ └─────────────────────────────────────────────────────────────────────────┘ │
+│ [ 🎨 Configure Role ]                                                       │
+└─────────────────────────────────────────────────────────────────────────────┘
+```
 
 ### 1. Panel Deployment
 Administrators can deploy the interactive management panel to any channel with:
