@@ -1,0 +1,35 @@
+{
+  "name": "koharu",
+  "version": "1.0.0",
+  "description": "A cute, feature-packed community Discord bot with dynamic custom roles, dual-gradient booster perks, economy, blackjack & administrative event keys.",
+  "main": "src/index.js",
+  "scripts": {
+    "start": "node src/index.js",
+    "dev": "node --watch src/index.js",
+    "test": "node --test test/*.test.js"
+  },
+  "keywords": [
+    "discord",
+    "discord-bot",
+    "discord-js",
+    "custom-roles",
+    "economy",
+    "blackjack",
+    "nekotina",
+    "anime",
+    "community-bot"
+  ],
+  "author": "Iris <iriss.smith08@proton.me> (https://github.com/iriss-dev)",
+  "license": "GPL-3.0-or-later",
+  "engines": {
+    "node": ">=20.0.0"
+  },
+  "dependencies": {
+    "better-sqlite3": "^12.11.1",
+    "discord.js": "^14.16.3",
+    "dotenv": "^16.4.5"
+  },
+  "optionalDependencies": {
+    "@napi-rs/canvas": "^0.1.60"
+  }
+}
