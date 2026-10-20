@@ -9,13 +9,13 @@
 [![Discord.js v14](https://img.shields.io/badge/discord.js-v14.16.3-A78BFA?style=for-the-badge&logo=discord&logoColor=white)](https://discord.js.org)
 [![Database](https://img.shields.io/badge/storage-SQLite%20WAL-34D399?style=for-the-badge&logo=sqlite&logoColor=white)](https://github.com/WiseLibs/better-sqlite3)
 [![License: GPL-3.0](https://img.shields.io/badge/license-GPL--3.0-EC4899?style=for-the-badge)](LICENSE)
-[![CI Status](https://img.shields.io/badge/tests-18%2F18%20passing-success?style=for-the-badge&logo=githubactions&logoColor=white)](.github/workflows/ci.yml)
+[![CI Status](https://img.shields.io/badge/tests-23%2F23%20passing-success?style=for-the-badge&logo=githubactions&logoColor=white)](.github/workflows/ci.yml)
 
 <p align="center">
-  <b>Koharu</b> brings a heartwarming anime aesthetic to your Discord server with interactive custom role management, dual-gradient booster perks, a cozy part-time job economy, button-driven Blackjack, and administrative event keys.
+  <b>Koharu</b> brings a heartwarming anime aesthetic to your Discord server with interactive custom role management, dual-gradient booster perks, essential moderation tooling, a cozy part-time job economy, button-driven Blackjack, and administrative event keys.
 </p>
 
-[Key Features](#-key-features) • [Role System](#-custom-role-system) • [Economy & Casino](#-economy--casino) • [Quick Start](#-quick-start) • [Command Reference](#-command-reference)
+[Key Features](#-key-features) • [Role System](#-custom-role-system) • [Moderation](#-moderation-suite) • [Economy & Casino](#-economy--casino) • [Quick Start](#-quick-start) • [Command Reference](#-command-reference)
 
 ---
 
@@ -25,6 +25,7 @@
 
 - 🎨 **Interactive Custom Role Panel**: Deploy a persistent embed with a one-click `[ Configure Role ]` button. Users can customize their role name, hex color, and icon through native Discord modals.
 - 🚀 **Nitro Booster Gradient Perks**: Server boosters unlock dual-color gradient roles (e.g. `#F472B6, #A78BFA`) and enjoy free role updates without spending coins.
+- 🛡️ **Essential Moderation Suite**: Clean, hierarchy-safe moderation tools (`/ban`, `/kick`, `/timeout`, `/untimeout`, `/purge`, `/slowmode`, `/warn`) with polite DM infractions.
 - 🪙 **Cozy Anime Economy**: 15+ cute part-time job shifts (`-work` / `/work`) at maid cafés, anime bookstores, and cat cafés with dynamic cooldowns.
 - 🏦 **Secure Banking & Leaderboards**: Keep coins safe with deposit/withdrawal commands (`-dep all`, `-with all`) and compete for top server wealth rankings.
 - 🃏 **Button-Driven Blackjack**: High-stakes casino action with interactive `[ Hit ]`, `[ Stand ]`, and `[ Double Down ]` buttons, soft-Ace handling, and natural 3:2 payouts.
@@ -70,6 +71,20 @@ Administrators can deploy the interactive management panel to any channel with:
    - **Booster Perks**: If the member is boosting the server, they can input two hex codes separated by a comma (`#F472B6, #A78BFA`) to unlock a blended gradient role!
    - **Payment Method**: Select whether to pay using `coins` or `key`. Boosters are automatically granted free creation.
 3. Koharu positions the created role right below your server's designated anchor role, assigns it to the user, and presents an embed confirmation with color swatch previews.
+
+---
+
+## 🛡️ Moderation Suite
+
+Keep your community safe with clean, hierarchy-safe moderation tools featuring automatic DM notices to users and zero chat clutter.
+
+- **`/ban <user> [reason] [delete_days]`**: Permanently ban members with optional message history cleanup (0-7 days).
+- **`/kick <user> [reason]`**: Remove disruptive members with direct message explanations.
+- **`/timeout <user> <duration> [reason]`**: Temporarily mute/isolate members using human durations (`10m`, `2h`, `1d`, `7d`).
+- **`/untimeout <user>`**: Instantly restore speaking privileges.
+- **`/purge <amount> [user]`**: Bulk delete up to 100 messages with 4-second auto-deleting confirmation.
+- **`/slowmode <seconds>`**: Adjust channel message cooldowns (0 to 6 hours).
+- **`/warn <add|list|clear> <user>`**: Issue formal infractions, view history timestamps, or clear clean slates.
 
 ---
 
@@ -165,6 +180,17 @@ npm test
 | :--- | :--- | :--- | :--- |
 | `/rolepanel setup` | `-rolepanel setup` | Deploy the persistent role configuration embed. | `Manage Roles` |
 | `/rolepanel config` | — | Modify role pricing, anchor position, and booster rules. | `Manage Roles` |
+
+### 🛡️ Moderation Tools
+| Command | Prefix | Description | Required Permissions |
+| :--- | :--- | :--- | :--- |
+| `/ban <user> [reason]` | `-ban <user>` | Permanently ban an abusive member. | `Ban Members` |
+| `/kick <user> [reason]` | `-kick <user>` | Kick a member from the server. | `Kick Members` |
+| `/timeout <user> <time>` | `-timeout <user>` | Isolate member (e.g. `10m`, `1h`, `1d`). | `Moderate Members` |
+| `/untimeout <user>` | `-untimeout <user>`| Remove active timeout. | `Moderate Members` |
+| `/purge <amount> [@user]`| `-purge <amount>` | Bulk delete messages (1-100). | `Manage Messages` |
+| `/slowmode <seconds>` | `-slowmode <sec>` | Adjust chat cooldown (0 to disable). | `Manage Channels` |
+| `/warn <add\|list\|clear>`| `-warn`, `-warnings`| Manage warnings & infraction records. | `Moderate Members` |
 
 ### 🪙 Economy & Banking
 | Command | Prefix | Description |

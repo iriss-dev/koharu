@@ -79,6 +79,7 @@ module.exports = {
         return interaction.update({
           embeds: [view.embed],
           components: view.components,
+          files: view.files,
         });
       }
       return;

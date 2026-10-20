@@ -34,6 +34,7 @@ db.exec(`
     booster_free INTEGER NOT NULL DEFAULT 1,
     booster_dual_color INTEGER NOT NULL DEFAULT 1,
     anchor_role_id TEXT DEFAULT NULL,
+    mod_log_channel_id TEXT DEFAULT NULL,
     updated_at INTEGER NOT NULL DEFAULT (strftime('%s', 'now'))
   );
 
@@ -48,9 +49,26 @@ db.exec(`
     created_at INTEGER NOT NULL DEFAULT (strftime('%s', 'now'))
   );
 
+  CREATE TABLE IF NOT EXISTS warnings (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id TEXT NOT NULL,
+    guild_id TEXT NOT NULL,
+    moderator_id TEXT NOT NULL,
+    reason TEXT NOT NULL,
+    created_at INTEGER NOT NULL DEFAULT (strftime('%s', 'now'))
+  );
+
   CREATE INDEX IF NOT EXISTS idx_users_coins ON users(coins);
   CREATE INDEX IF NOT EXISTS idx_history_user ON role_history(user_id);
+  CREATE INDEX IF NOT EXISTS idx_warnings_user ON warnings(user_id, guild_id);
 `);
+
+// Safe column migrations for existing databases
+try {
+  db.exec('ALTER TABLE guild_settings ADD COLUMN mod_log_channel_id TEXT DEFAULT NULL;');
+} catch {
+  // Column already exists
+}
 
 // Prepared statements for high performance
 const statements = {
@@ -63,14 +81,15 @@ const statements = {
   setCustomRole: db.prepare('UPDATE users SET custom_role_id = ? WHERE user_id = ?'),
   getGuildSettings: db.prepare('SELECT * FROM guild_settings WHERE guild_id = ?'),
   upsertGuildSettings: db.prepare(`
-    INSERT INTO guild_settings (guild_id, role_cost_coins, role_cost_keys, booster_free, booster_dual_color, anchor_role_id)
-    VALUES (@guild_id, @role_cost_coins, @role_cost_keys, @booster_free, @booster_dual_color, @anchor_role_id)
+    INSERT INTO guild_settings (guild_id, role_cost_coins, role_cost_keys, booster_free, booster_dual_color, anchor_role_id, mod_log_channel_id)
+    VALUES (@guild_id, @role_cost_coins, @role_cost_keys, @booster_free, @booster_dual_color, @anchor_role_id, @mod_log_channel_id)
     ON CONFLICT(guild_id) DO UPDATE SET
       role_cost_coins = excluded.role_cost_coins,
       role_cost_keys = excluded.role_cost_keys,
       booster_free = excluded.booster_free,
       booster_dual_color = excluded.booster_dual_color,
       anchor_role_id = excluded.anchor_role_id,
+      mod_log_channel_id = excluded.mod_log_channel_id,
       updated_at = strftime('%s', 'now')
   `),
   setRolePanel: db.prepare(`
@@ -91,36 +110,30 @@ const statements = {
     ORDER BY net_worth DESC 
     LIMIT ?
   `),
+  addWarning: db.prepare(`
+    INSERT INTO warnings (user_id, guild_id, moderator_id, reason)
+    VALUES (?, ?, ?, ?)
+  `),
+  getWarnings: db.prepare(`
+    SELECT * FROM warnings WHERE user_id = ? AND guild_id = ? ORDER BY id DESC
+  `),
+  clearWarnings: db.prepare(`
+    DELETE FROM warnings WHERE user_id = ? AND guild_id = ?
+  `),
 };
 
 const DatabaseService = {
-  /**
-   * Fetch a user profile or create one if it does not exist.
-   * @param {string} userId
-   * @returns {object}
-   */
   getUser(userId) {
     statements.createUser.run(userId);
     return statements.getUser.get(userId);
   },
 
-  /**
-   * Add or subtract coins from a user's wallet.
-   * @param {string} userId
-   * @param {number} amount
-   * @returns {object}
-   */
   addCoins(userId, amount) {
     this.getUser(userId);
     statements.updateCoins.run(amount, userId);
     return statements.getUser.get(userId);
   },
 
-  /**
-   * Transfer coins from wallet into bank.
-   * @param {string} userId
-   * @param {number} amount
-   */
   deposit(userId, amount) {
     const user = this.getUser(userId);
     if (amount <= 0 || user.coins < amount) {
@@ -136,11 +149,6 @@ const DatabaseService = {
     return statements.getUser.get(userId);
   },
 
-  /**
-   * Transfer coins from bank into wallet.
-   * @param {string} userId
-   * @param {number} amount
-   */
   withdraw(userId, amount) {
     const user = this.getUser(userId);
     if (amount <= 0 || user.bank < amount) {
@@ -156,43 +164,24 @@ const DatabaseService = {
     return statements.getUser.get(userId);
   },
 
-  /**
-   * Add or deduct event keys for a user.
-   * @param {string} userId
-   * @param {number} amount
-   */
   modifyKeys(userId, amount) {
     this.getUser(userId);
     statements.updateKeys.run(amount, userId);
     return statements.getUser.get(userId);
   },
 
-  /**
-   * Set the last work timestamp for cooldown checks.
-   * @param {string} userId
-   * @param {number} timestamp
-   */
   setLastWork(userId, timestamp = Math.floor(Date.now() / 1000)) {
     this.getUser(userId);
     statements.updateLastWork.run(timestamp, userId);
     return statements.getUser.get(userId);
   },
 
-  /**
-   * Link an existing role ID to the user.
-   * @param {string} userId
-   * @param {string|null} roleId
-   */
   setCustomRole(userId, roleId) {
     this.getUser(userId);
     statements.setCustomRole.run(roleId, userId);
     return statements.getUser.get(userId);
   },
 
-  /**
-   * Fetch guild configuration, filling in global defaults if unconfigured.
-   * @param {string} guildId
-   */
   getGuildSettings(guildId) {
     const row = statements.getGuildSettings.get(guildId);
     if (row) return row;
@@ -206,12 +195,10 @@ const DatabaseService = {
       booster_free: config.roles.boosterFree ? 1 : 0,
       booster_dual_color: config.roles.boosterDualColor ? 1 : 0,
       anchor_role_id: null,
+      mod_log_channel_id: null,
     };
   },
 
-  /**
-   * Update guild configuration parameters.
-   */
   saveGuildSettings(settings) {
     statements.upsertGuildSettings.run({
       guild_id: settings.guild_id,
@@ -220,34 +207,35 @@ const DatabaseService = {
       booster_free: settings.booster_free ? 1 : 0,
       booster_dual_color: settings.booster_dual_color ? 1 : 0,
       anchor_role_id: settings.anchor_role_id || null,
+      mod_log_channel_id: settings.mod_log_channel_id || null,
     });
     return this.getGuildSettings(settings.guild_id);
   },
 
-  /**
-   * Save the channel & message ID of an active role panel embed.
-   */
   setRolePanel(guildId, channelId, messageId) {
     statements.setRolePanel.run(guildId, channelId, messageId);
   },
 
-  /**
-   * Record a role purchase or re-color in history.
-   */
   recordRolePurchase(userId, guildId, roleId, name, color, paymentMethod) {
     statements.recordRolePurchase.run(userId, guildId, roleId, name, color, paymentMethod);
   },
 
-  /**
-   * Retrieve top users ordered by total net worth.
-   */
   getLeaderboard(limit = 10) {
     return statements.getTopUsers.all(limit);
   },
 
-  /**
-   * Close the database connection cleanly (e.g. for testing or shutdown).
-   */
+  addWarning(userId, guildId, moderatorId, reason) {
+    return statements.addWarning.run(userId, guildId, moderatorId, reason);
+  },
+
+  getWarnings(userId, guildId) {
+    return statements.getWarnings.all(userId, guildId);
+  },
+
+  clearWarnings(userId, guildId) {
+    return statements.clearWarnings.run(userId, guildId);
+  },
+
   close() {
     db.close();
   }

@@ -83,4 +83,17 @@ describe('Database Service', () => {
     const user = db.getUser('test_user_1');
     assert.equal(user.custom_role_id, 'custom_role_999');
   });
+
+  test('records and clears member warnings', () => {
+    db.addWarning('bad_user_1', 'guild_123', 'mod_456', 'Spamming emojis');
+    db.addWarning('bad_user_1', 'guild_123', 'mod_456', 'Disrespectful language');
+
+    const list = db.getWarnings('bad_user_1', 'guild_123');
+    assert.equal(list.length, 2);
+    assert.equal(list[0].reason, 'Disrespectful language');
+
+    db.clearWarnings('bad_user_1', 'guild_123');
+    const emptyList = db.getWarnings('bad_user_1', 'guild_123');
+    assert.equal(emptyList.length, 0);
+  });
 });

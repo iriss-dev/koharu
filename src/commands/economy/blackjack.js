@@ -194,7 +194,12 @@ module.exports = {
     }
 
     const view = buildBlackjackView(result.game);
-    const replyMsg = await interaction.reply({ embeds: [view.embed], components: view.components, fetchReply: true });
+    const replyMsg = await interaction.reply({
+      embeds: [view.embed],
+      components: view.components,
+      files: view.files,
+      fetchReply: true,
+    });
 
     if (result.game.inProgress) {
       result.game.messageId = replyMsg.id;
@@ -228,7 +233,11 @@ module.exports = {
     }
 
     const view = buildBlackjackView(result.game);
-    const replyMsg = await message.reply({ embeds: [view.embed], components: view.components });
+    const replyMsg = await message.reply({
+      embeds: [view.embed],
+      components: view.components,
+      files: view.files,
+    });
 
     if (result.game.inProgress) {
       result.game.messageId = replyMsg.id;

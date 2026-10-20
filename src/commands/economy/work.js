@@ -1,7 +1,7 @@
 const { SlashCommandBuilder } = require('discord.js');
 const db = require('../../database/db');
 const config = require('../../config');
-const { successEmbed, errorEmbed } = require('../../utils/embeds');
+const { successEmbed, buildCooldownEmbed } = require('../../utils/embeds');
 
 const JOBS = [
   { text: 'Worked a quiet afternoon shift at the cat café serving strawberry matcha lattes', bonus: 0 },
@@ -35,12 +35,11 @@ function executeWork(userId, displayName) {
 
   if (elapsed < config.economy.workCooldown) {
     const remaining = config.economy.workCooldown - elapsed;
+    const cooldownView = buildCooldownEmbed(displayName, formatTimeRemaining(remaining));
     return {
       success: false,
-      embed: errorEmbed(
-        'Take a Break!',
-        `You are still resting, **${displayName}**! Please wait **${formatTimeRemaining(remaining)}** before working again.`
-      ),
+      embed: cooldownView.embed,
+      files: cooldownView.files,
     };
   }
 
@@ -56,7 +55,7 @@ function executeWork(userId, displayName) {
     `**${job.text}**\n\nYou earned **+${earned.toLocaleString()} coins** 🪙!`
   );
 
-  return { success: true, embed };
+  return { success: true, embed, files: [] };
 }
 
 module.exports = {
@@ -68,11 +67,15 @@ module.exports = {
 
   async executeSlash(interaction) {
     const res = executeWork(interaction.user.id, interaction.member.displayName);
-    return interaction.reply({ embeds: [res.embed], ephemeral: !res.success });
+    return interaction.reply({
+      embeds: [res.embed],
+      files: res.files,
+      ephemeral: !res.success,
+    });
   },
 
   async executePrefix(message) {
     const res = executeWork(message.author.id, message.member.displayName);
-    return message.reply({ embeds: [res.embed] });
+    return message.reply({ embeds: [res.embed], files: res.files });
   },
 };

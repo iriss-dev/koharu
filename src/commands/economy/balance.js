@@ -30,8 +30,8 @@ module.exports = {
 
   async executeSlash(interaction) {
     const target = interaction.options.getMember('user') || interaction.member;
-    const embed = await showBalance(target, interaction.guild);
-    return interaction.reply({ embeds: [embed] });
+    const view = await showBalance(target, interaction.guild);
+    return interaction.reply({ embeds: [view.embed], files: view.files });
   },
 
   async executePrefix(message, args) {
@@ -43,7 +43,7 @@ module.exports = {
       if (match) target = match;
     }
 
-    const embed = await showBalance(target, message.guild);
-    return message.reply({ embeds: [embed] });
+    const view = await showBalance(target, message.guild);
+    return message.reply({ embeds: [view.embed], files: view.files });
   },
 };
