@@ -10,11 +10,7 @@ function getAssetPath(filename) {
 }
 
 /**
- * Creates a cute, styled standard embed.
- * @param {string} title
- * @param {string} description
- * @param {string} color
- * @returns {EmbedBuilder}
+ * Standard cute base embed builder.
  */
 function createBaseEmbed(title, description, color = config.colors.primary) {
   const embed = new EmbedBuilder()
@@ -27,64 +23,47 @@ function createBaseEmbed(title, description, color = config.colors.primary) {
   return embed;
 }
 
-/**
- * Creates a standard success embed with cute aesthetic.
- * @param {string} title
- * @param {string} description
- * @returns {EmbedBuilder}
- */
 function successEmbed(title, description) {
-  return createBaseEmbed(`🌸 ${title}`, description, config.colors.success);
+  return createBaseEmbed(
+    `🌸 ${title}`,
+    description.startsWith('>') ? description : `> ${description.replace(/\n/g, '\n> ')}`,
+    config.colors.success
+  );
 }
 
-/**
- * Creates a clean, helpful error embed.
- * @param {string} title
- * @param {string} description
- * @returns {EmbedBuilder}
- */
 function errorEmbed(title, description) {
-  return createBaseEmbed(`💔 ${title}`, description, config.colors.error);
+  return createBaseEmbed(
+    `💔 ${title}`,
+    description.startsWith('>') ? description : `> ${description.replace(/\n/g, '\n> ')}`,
+    config.colors.error
+  );
 }
 
 /**
- * Builds the interactive Role Management Panel embed and action row.
- * @param {object} settings
- * @returns {{ embed: EmbedBuilder, components: ActionRowBuilder[] }}
+ * Builds the interactive Custom Role Panel in Nekotina style.
+ * Includes banner.png at the bottom.
  */
 function buildRolePanel(settings) {
+  const bannerFile = new AttachmentBuilder(getAssetPath('banner.png'), { name: 'banner.png' });
+
   const embed = new EmbedBuilder()
     .setColor(config.colors.primary)
-    .setTitle('Custom Role Management')
+    .setAuthor({ name: 'Koharu | Identity & Custom Roles', iconURL: 'https://cdn.discordapp.com/emojis/1049747514330456104.png' })
+    .setTitle('🎨 Custom Role Management')
     .setDescription(
-      'Manage your personalized role with our server\'s role features. ' +
-      'Create, customize, and maintain your role identity directly from this panel.\n\n' +
-      '**✨ Available Features**\n' +
-      '• Choose any custom name and 6-character hex color.\n' +
-      '• **Nitro Boosters**: Unlock dual-color gradient roles and free renames.\n' +
-      '• Automatic hierarchy positioning & persistent assignment.'
+      `> Create, customize, and maintain your personal server identity directly from this panel.\n\n` +
+      `**✨ Role Features**\n` +
+      `• Choose any custom name and 6-character hex color.\n` +
+      `• **Server Boosters:** Unlock dual-color gradient roles & free renames.\n` +
+      `• Automatic hierarchy positioning beneath staff roles.\n\n` +
+      `**🪙 Rates & Pricing**\n` +
+      `> • **Coins:** \`${settings.role_cost_coins.toLocaleString()}\` coins\n` +
+      `> • **Event Keys:** \`${settings.role_cost_keys}\` 🔑\n` +
+      `> • **Server Boosters:** \`${settings.booster_free ? '100% Free ✨' : 'Standard Rate'}\`\n\n` +
+      `*Click the button below to open your customization window!*`
     )
-    .addFields(
-      {
-        name: '🪙 Cost per Role',
-        value: [
-          `• **Coins:** ${settings.role_cost_coins.toLocaleString()} coins`,
-          `• **Event Keys:** ${settings.role_cost_keys} 🔑`,
-          `• **Server Boosters:** ${settings.booster_free ? '100% Free ✨' : 'Standard rate'}`
-        ].join('\n'),
-        inline: true
-      },
-      {
-        name: '❓ How it Works',
-        value: [
-          '1. Click **Configure Role** below.',
-          '2. Enter your role name & hex color.',
-          '3. Your role is instantly created & synced!'
-        ].join('\n'),
-        inline: true
-      }
-    )
-    .setFooter({ text: 'Koharu Role Management • Clean & automatic hierarchy' })
+    .setImage('attachment://banner.png')
+    .setFooter({ text: 'Koharu Role Management • Instant sync & zero clutter' })
     .setTimestamp();
 
   const button = new ButtonBuilder()
@@ -95,13 +74,12 @@ function buildRolePanel(settings) {
 
   const row = new ActionRowBuilder().addComponents(button);
 
-  return { embed, components: [row] };
+  return { embed, components: [row], files: [bannerFile] };
 }
 
 /**
- * Builds the Blackjack embed with pink playing cards banner.
- * @param {object} game
- * @returns {{ embed: EmbedBuilder, components: ActionRowBuilder[], files: AttachmentBuilder[] }}
+ * Builds the Blackjack embed in Nekotina style.
+ * Cards banner at the bottom.
  */
 function buildBlackjackView(game) {
   const pScore = calculateHand(game.playerHand);
@@ -111,17 +89,18 @@ function buildBlackjackView(game) {
 
   const embed = new EmbedBuilder()
     .setColor(game.inProgress ? config.colors.primary : (game.won ? config.colors.success : (game.push ? config.colors.gold : config.colors.error)))
-    .setTitle(`Blackjack ─ Playing for ${game.bet.toLocaleString()} coins`)
+    .setAuthor({ name: `Koharu Casino | Blackjack`, iconURL: 'https://cdn.discordapp.com/emojis/1049747514330456104.png' })
+    .setTitle(`🃏 Playing for ${game.bet.toLocaleString()} coins`)
     .setDescription(
       `**Dealer's Hand**\n` +
-      `${formatHand(game.dealerHand, game.inProgress)} ` +
-      `\`(${game.inProgress ? '?' : dScore.total})\`\n\n` +
+      `> ${formatHand(game.dealerHand, game.inProgress)} \`(${game.inProgress ? '?' : dScore.total})\`\n\n` +
       `**Your Hand**\n` +
-      `${formatHand(game.playerHand)} \`(${pScore.total})\`\n\n` +
-      `**Game Status:** ${game.statusText || 'Choose your next action below.'}`
+      `> ${formatHand(game.playerHand)} \`(${pScore.total})\`\n\n` +
+      `**Game Status:**\n` +
+      `> ${game.statusText || 'Choose your move below (`Hit`, `Stand` or `Double Down`).'}`
     )
     .setImage('attachment://pink_cards.png')
-    .setFooter({ text: `Requested by ${game.username}` })
+    .setFooter({ text: `Player: ${game.username} • Minimum bet: 10 coins` })
     .setTimestamp();
 
   if (!game.inProgress) {
@@ -151,11 +130,8 @@ function buildBlackjackView(game) {
 }
 
 /**
- * Builds user balance card with pink money stacks thumbnail.
- * @param {object} user
- * @param {import('discord.js').GuildMember} member
- * @param {string|null} roleName
- * @returns {{ embed: EmbedBuilder, files: AttachmentBuilder[] }}
+ * Builds user balance in Nekotina style.
+ * Pink yen money stacks image at the bottom.
  */
 function buildBalanceEmbed(user, member, roleName = null) {
   const total = user.coins + user.bank;
@@ -164,72 +140,75 @@ function buildBalanceEmbed(user, member, roleName = null) {
   const embed = new EmbedBuilder()
     .setColor(config.colors.primary)
     .setAuthor({
-      name: `${member.displayName}'s Balance & Assets`,
+      name: `${member.displayName}'s Economy & Assets`,
       iconURL: member.user.displayAvatarURL({ dynamic: true })
     })
-    .setThumbnail('attachment://pink_money.jpg')
-    .addFields(
-      { name: '🪙 Wallet', value: `${user.coins.toLocaleString()} coins`, inline: true },
-      { name: '🏦 Bank', value: `${user.bank.toLocaleString()} coins`, inline: true },
-      { name: '💎 Net Worth', value: `${total.toLocaleString()} coins`, inline: true },
-      { name: '🔑 Event Keys', value: `${user.keys.toLocaleString()} keys`, inline: true },
-      { name: '🌸 Custom Role', value: roleName ? roleName : '*None assigned*', inline: true },
-      { name: '🚀 Booster Perk', value: member.premiumSince ? 'Active Booster ✨' : 'Standard Member', inline: true }
+    .setDescription(
+      `> 🪙 **Wallet:** \`${user.coins.toLocaleString()}\` coins\n` +
+      `> 🏦 **Bank:** \`${user.bank.toLocaleString()}\` coins\n` +
+      `> 💎 **Net Worth:** \`${total.toLocaleString()}\` coins\n` +
+      `> 🔑 **Event Keys:** \`${user.keys.toLocaleString()}\` keys\n` +
+      `> 🌸 **Custom Role:** ${roleName ? roleName : '*None assigned*'}\n` +
+      `> 🚀 **Booster Perk:** ${member.premiumSince ? '`Active Booster ✨`' : '`Standard Member`'}`
     )
-    .setFooter({ text: 'Koharu Economy System' })
+    .setImage('attachment://pink_money.jpg')
+    .setFooter({ text: 'Koharu Economy System • Safe banking & instant transfers' })
     .setTimestamp();
 
   return { embed, files: [moneyFile] };
 }
 
 /**
- * Builds a rest / cooldown embed with cute yawning cat.
- * @param {string} displayName
- * @param {string} remainingFormatted
- * @returns {{ embed: EmbedBuilder, files: AttachmentBuilder[] }}
+ * Builds a rest / cooldown embed in Nekotina style.
+ * Yawning cat image at the bottom.
  */
 function buildCooldownEmbed(displayName, remainingFormatted) {
   const catFile = new AttachmentBuilder(getAssetPath('cat_yawn.png'), { name: 'cat_yawn.png' });
 
   const embed = new EmbedBuilder()
     .setColor(config.colors.primary)
-    .setTitle('☕ Take a Little Break!')
-    .setDescription(`You are still resting, **${displayName}**!\n\nPlease wait **${remainingFormatted}** before starting another shift.`)
-    .setThumbnail('attachment://cat_yawn.png')
-    .setFooter({ text: 'Koharu Cozy Jobs' })
+    .setAuthor({ name: 'Koharu | Cozy Jobs & Shifts' })
+    .setTitle('☕ Take a Little Rest!')
+    .setDescription(
+      `> You are still resting from your previous shift, **${displayName}**!\n` +
+      `> ⏳ **Time Remaining:** \`${remainingFormatted}\`\n` +
+      `> 🐾 Grab some strawberry matcha tea while you wait...`
+    )
+    .setImage('attachment://cat_yawn.png')
+    .setFooter({ text: 'Koharu Jobs • Cooldown protects server economy' })
     .setTimestamp();
 
   return { embed, files: [catFile] };
 }
 
 /**
- * Builds a clean moderation action embed with Yui behind the glass thumbnail.
- * @param {string} action (e.g. 'Banned', 'Kicked', 'Timed Out', 'Warned')
- * @param {import('discord.js').User} targetUser
- * @param {import('discord.js').User} moderator
- * @param {string} reason
- * @param {string|null} duration
- * @returns {{ embed: EmbedBuilder, files: AttachmentBuilder[] }}
+ * Builds a moderation embed in Nekotina style.
+ * Large Yui behind the glass image placed AT THE BOTTOM.
  */
 function buildModEmbed(action, targetUser, moderator, reason, duration = null) {
   const yuiFile = new AttachmentBuilder(getAssetPath('yui_glass.png'), { name: 'yui_glass.png' });
 
-  const embed = new EmbedBuilder()
-    .setColor(action.includes('Banned') ? '#EF4444' : action.includes('Timed') ? '#EC4899' : '#F472B6')
-    .setTitle(`🛡️ Member ${action}`)
-    .setDescription(`**${targetUser.tag}** (\`${targetUser.id}\`) has been **${action.toLowerCase()}**.`)
-    .setThumbnail('attachment://yui_glass.png')
-    .addFields(
-      { name: '👤 Target', value: `<@${targetUser.id}>`, inline: true },
-      { name: '👮 Moderator', value: `<@${moderator.id}>`, inline: true },
-      { name: '📝 Reason', value: reason || '*No reason provided*', inline: false }
-    )
-    .setFooter({ text: 'Koharu Moderation Engine' })
-    .setTimestamp();
+  const color = action.includes('Banned')
+    ? '#EF4444'
+    : action.includes('Timed')
+    ? '#EC4899'
+    : config.colors.primary;
 
-  if (duration) {
-    embed.addFields({ name: '⏳ Duration', value: `\`${duration}\``, inline: true });
-  }
+  const durationLine = duration ? `> ⏳ **Duration:** \`${duration}\`\n` : '';
+
+  const embed = new EmbedBuilder()
+    .setColor(color)
+    .setAuthor({ name: `Koharu | Moderation Case` })
+    .setTitle(`🛡️ Member ${action}`)
+    .setDescription(
+      `> 👤 **User:** <@${targetUser.id}> \`(${targetUser.id})\`\n` +
+      `> 👮 **Moderator:** <@${moderator.id}>\n` +
+      `${durationLine}` +
+      `> 📝 **Reason:** \`${reason || 'No reason provided'}\``
+    )
+    .setImage('attachment://yui_glass.png')
+    .setFooter({ text: `Koharu Moderation Engine • Case logged successfully` })
+    .setTimestamp();
 
   return { embed, files: [yuiFile] };
 }

@@ -60,7 +60,11 @@ module.exports = {
       const settings = db.getGuildSettings(guildId);
       const panel = buildRolePanel(settings);
 
-      const msg = await channel.send({ embeds: [panel.embed], components: panel.components });
+      const msg = await channel.send({
+        embeds: [panel.embed],
+        components: panel.components,
+        files: panel.files,
+      });
       db.setRolePanel(guildId, channel.id, msg.id);
 
       return interaction.reply({
@@ -114,7 +118,11 @@ module.exports = {
     if (action === 'setup') {
       const settings = db.getGuildSettings(message.guild.id);
       const panel = buildRolePanel(settings);
-      const msg = await message.channel.send({ embeds: [panel.embed], components: panel.components });
+      const msg = await message.channel.send({
+        embeds: [panel.embed],
+        components: panel.components,
+        files: panel.files,
+      });
       db.setRolePanel(message.guild.id, message.channel.id, msg.id);
       return message.reply({ embeds: [successEmbed('Panel Deployed', 'Interactive role panel has been published!')] });
     }
