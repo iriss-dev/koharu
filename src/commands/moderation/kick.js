@@ -1,97 +1,41 @@
+'use strict';
+
 const { SlashCommandBuilder, PermissionFlagsBits } = require('discord.js');
-const { buildModEmbed, errorEmbed } = require('../../utils/embeds');
+const { loc } = require('../../core/slash');
+const ui = require('../../core/ui');
+const args = require('../../core/args');
+const mod = require('../../features/moderation');
+
+const data = loc(new SlashCommandBuilder(), ['kick', 'expulsar'], ['Remove someone from the server', 'Expulsa a alguien del servidor'])
+  .setDefaultMemberPermissions(PermissionFlagsBits.KickMembers)
+  .addUserOption(opt => loc(opt, ['user', 'usuario'], ['Who', 'Quién']).setRequired(true))
+  .addStringOption(opt => loc(opt, ['reason', 'motivo'], ['Why', 'Por qué']).setMaxLength(400));
 
 module.exports = {
-  data: new SlashCommandBuilder()
-    .setName('kick')
-    .setDescription('Kick a member from the server')
-    .setDefaultMemberPermissions(PermissionFlagsBits.KickMembers)
-    .addUserOption(opt =>
-      opt.setName('user')
-        .setDescription('Target member to kick')
-        .setRequired(true)
-    )
-    .addStringOption(opt =>
-      opt.setName('reason')
-        .setDescription('Reason for the kick')
-        .setRequired(false)
-    ),
+  data,
+  category: 'moderation',
+  emoji: 'shield',
 
-  aliases: ['k'],
-
-  async executeSlash(interaction) {
-    const targetUser = interaction.options.getUser('user');
-    const reason = interaction.options.getString('reason') || 'No reason specified';
-    const { guild, member: modMember } = interaction;
-
-    if (targetUser.id === interaction.user.id) {
-      return interaction.reply({ embeds: [errorEmbed('Action Denied', 'You cannot kick yourself!')], ephemeral: true });
-    }
-
-    if (targetUser.id === guild.ownerId) {
-      return interaction.reply({ embeds: [errorEmbed('Action Denied', 'You cannot kick the server owner!')], ephemeral: true });
-    }
-
-    const targetMember = await guild.members.fetch(targetUser.id).catch(() => null);
-    if (!targetMember) {
-      return interaction.reply({ embeds: [errorEmbed('User Not Found', 'This user is not in the server.')], ephemeral: true });
-    }
-
-    if (!targetMember.kickable) {
-      return interaction.reply({
-        embeds: [errorEmbed('Hierarchy Error', 'I cannot kick this member because their role is equal to or higher than mine!')],
-        ephemeral: true,
-      });
-    }
-
-    if (modMember.roles.highest.position <= targetMember.roles.highest.position && modMember.id !== guild.ownerId) {
-      return interaction.reply({
-        embeds: [errorEmbed('Hierarchy Error', 'You cannot kick someone with an equal or higher role than you!')],
-        ephemeral: true,
-      });
-    }
-
-    await targetUser.send(`🌸 You were kicked from **${guild.name}**.\n**Reason:** ${reason}`).catch(() => null);
-    await targetMember.kick(`${reason} (Kicked by ${interaction.user.tag})`);
-
-    const modView = buildModEmbed('Kicked', targetUser, interaction.user, reason);
-    return interaction.reply({ embeds: [modView.embed], files: modView.files });
+  prefix: {
+    aliases: ['echar'],
+    async parse(message, rawArgs) {
+      const { user, rest } = await args.userAndRest(message, rawArgs);
+      return { options: { user, reason: rest || null } };
+    },
   },
 
-  async executePrefix(message, args) {
-    if (!message.member.permissions.has(PermissionFlagsBits.KickMembers)) {
-      return message.reply({ embeds: [errorEmbed('Permission Denied', 'You need `Kick Members` permission to use this command.')] });
-    }
+  async run(ctx) {
+    const denied = mod.requirePermission(ctx, PermissionFlagsBits.KickMembers);
+    if (denied) return ctx.reply(denied);
+    const user = ctx.opt.user('user');
+    if (!user) return ctx.reply(ui.message(ui.notice('info', ctx.t('common.usageTitle'), '`/expulsar usuario: motivo:` · `-kick @alguien motivo`'), { ephemeral: true }));
+    const member = await ctx.guild.members.fetch(user.id).catch(() => null);
+    const blocked = mod.checkTarget(ctx, user, member, 'kickable');
+    if (blocked) return ctx.reply(blocked);
 
-    const targetUser = message.mentions.users.first() || (args[0] ? await message.client.users.fetch(args[0]).catch(() => null) : null);
-    if (!targetUser) {
-      return message.reply({ embeds: [errorEmbed('Usage', '`-kick <@user|ID> [reason]`')] });
-    }
-
-    const reason = args.slice(1).join(' ') || 'No reason specified';
-    const { guild, member: modMember } = message;
-
-    if (targetUser.id === message.author.id) {
-      return message.reply({ embeds: [errorEmbed('Action Denied', 'You cannot kick yourself!')] });
-    }
-
-    const targetMember = await guild.members.fetch(targetUser.id).catch(() => null);
-    if (!targetMember) {
-      return message.reply({ embeds: [errorEmbed('User Not Found', 'This member is not in the server.')] });
-    }
-
-    if (!targetMember.kickable) {
-      return message.reply({ embeds: [errorEmbed('Hierarchy Error', 'I cannot kick this member due to role hierarchy.')] });
-    }
-
-    if (modMember.roles.highest.position <= targetMember.roles.highest.position && modMember.id !== guild.ownerId) {
-      return message.reply({ embeds: [errorEmbed('Hierarchy Error', 'You cannot kick someone with an equal or higher role.')] });
-    }
-
-    await targetUser.send(`🌸 You were kicked from **${guild.name}**.\n**Reason:** ${reason}`).catch(() => null);
-    await targetMember.kick(`${reason} (Kicked by ${message.author.tag})`);
-
-    const modView = buildModEmbed('Kicked', targetUser, message.author, reason);
-    return message.reply({ embeds: [modView.embed], files: modView.files });
+    const reason = ctx.opt.string('reason');
+    await mod.notifyMember(user, ctx.locale, { guild: ctx.guild, action: 'kick', reason });
+    await member.kick(`${reason ?? '—'} (${ctx.user.tag})`.slice(0, 512));
+    return mod.respond(ctx, { action: 'kick', target: user, moderator: ctx.user, reason });
   },
 };

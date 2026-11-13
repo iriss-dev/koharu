@@ -1,51 +1,50 @@
-const { REST, Routes, ActivityType } = require('discord.js');
-const config = require('../config');
-const { slashCommandData } = require('../commands');
+'use strict';
 
-const STATUS_ROTATION = [
-  { name: 'over your custom roles 🌸', type: ActivityType.Watching },
-  { name: 'Blackjack at the casino 🃏', type: ActivityType.Playing },
-  { name: 'strawberry matcha lattes 🍵', type: ActivityType.Custom },
-  { name: 'the cat café counter 🐾', type: ActivityType.Watching },
-  { name: 'type /help or -help ✨', type: ActivityType.Listening },
+const path = require('path');
+const { Events, REST, Routes, ActivityType } = require('discord.js');
+const config = require('../config');
+const registry = require('../core/registry');
+const emojis = require('../core/emojis');
+const scheduler = require('../core/scheduler');
+const deals = require('../features/deals');
+
+const STATUS = [
+  { name: '/ayuda · /help', type: ActivityType.Listening },
+  { name: 'anime 🌸', type: ActivityType.Watching },
+  { name: 'outfits ✨', type: ActivityType.Watching },
+  { name: 'ofertas · deals 🎁', type: ActivityType.Watching },
 ];
 
+async function deployCommands(client) {
+  const { slashData } = registry.get();
+  const rest = new REST({ version: '10' }).setToken(config.token);
+  const appId = config.clientId || client.application.id;
+  const route = config.devGuildId ? Routes.applicationGuildCommands(appId, config.devGuildId) : Routes.applicationCommands(appId);
+  await rest.put(route, { body: slashData });
+  console.log(`[Koharu] Registered ${slashData.length} slash commands ${config.devGuildId ? `in guild ${config.devGuildId}` : 'globally'}.`);
+}
+
 module.exports = {
-  name: 'ready',
+  name: Events.ClientReady,
   once: true,
   async execute(client) {
-    console.log(`[Koharu] Logged in as ${client.user.tag} (${client.user.id})`);
+    console.log(`[Koharu] Logged in as ${client.user.tag} · ${client.guilds.cache.size} servers`);
 
-    // Register slash commands via REST
-    if (config.token && config.clientId) {
-      try {
-        const rest = new REST({ version: '10' }).setToken(config.token);
-        console.log(`[Koharu] Deploying ${slashCommandData.length} application (/) commands...`);
-
-        await rest.put(
-          Routes.applicationCommands(config.clientId),
-          { body: slashCommandData }
-        );
-        console.log('[Koharu] Successfully synced application commands with Discord!');
-      } catch (err) {
-        console.error('[Koharu] Failed to deploy application commands:', err);
-      }
-    } else {
-      console.warn('[Koharu] Notice: DISCORD_TOKEN or CLIENT_ID not provided. Slash command deployment skipped.');
+    if (config.deployCommands) await deployCommands(client).catch(err => console.error('[Koharu] Slash command registration failed:', err.message));
+    if (config.emojiSync) {
+      await emojis.sync(client, { stateFile: path.join(config.dataDir, 'emoji-state.json') })
+        .catch(err => console.warn('[Emojis] Sync skipped:', err.message));
     }
 
-    // Dynamic presence status loop
-    let statusIndex = 0;
-    const updatePresence = () => {
-      const current = STATUS_ROTATION[statusIndex];
-      client.user.setPresence({
-        activities: [{ name: current.name, type: current.type }],
-        status: 'online',
-      });
-      statusIndex = (statusIndex + 1) % STATUS_ROTATION.length;
+    let i = 0;
+    const rotate = () => {
+      client.user.setPresence({ activities: [{ name: STATUS[i % STATUS.length].name, type: STATUS[i % STATUS.length].type }], status: 'online' });
+      i += 1;
     };
+    rotate();
+    setInterval(rotate, 45_000).unref();
 
-    updatePresence();
-    setInterval(updatePresence, 30_000);
+    scheduler.every('free-games', config.deals.freeGamesIntervalMinutes, () => deals.freeGamesTick(client, { defaultLocale: config.defaultLocale }));
+    scheduler.every('price-alerts', config.deals.priceAlertIntervalMinutes, () => deals.priceAlertsTick(client), { firstRunAfterMs: 5 * 60_000 });
   },
 };

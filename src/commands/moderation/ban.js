@@ -1,106 +1,45 @@
+'use strict';
+
 const { SlashCommandBuilder, PermissionFlagsBits } = require('discord.js');
-const { buildModEmbed, errorEmbed } = require('../../utils/embeds');
+const { loc } = require('../../core/slash');
+const ui = require('../../core/ui');
+const args = require('../../core/args');
+const mod = require('../../features/moderation');
+
+const data = loc(new SlashCommandBuilder(), ['ban', 'banear'], ['Ban someone from the server', 'Banea a alguien del servidor'])
+  .setDefaultMemberPermissions(PermissionFlagsBits.BanMembers)
+  .addUserOption(opt => loc(opt, ['user', 'usuario'], ['Who', 'Quién']).setRequired(true))
+  .addStringOption(opt => loc(opt, ['reason', 'motivo'], ['Why', 'Por qué']).setMaxLength(400))
+  .addIntegerOption(opt => loc(opt, ['delete_days', 'borrar_días'], ['Days of messages to delete (0–7)', 'Días de mensajes a borrar (0–7)']).setMinValue(0).setMaxValue(7));
 
 module.exports = {
-  data: new SlashCommandBuilder()
-    .setName('ban')
-    .setDescription('Permanently ban a member from the server')
-    .setDefaultMemberPermissions(PermissionFlagsBits.BanMembers)
-    .addUserOption(opt =>
-      opt.setName('user')
-        .setDescription('Target member to ban')
-        .setRequired(true)
-    )
-    .addStringOption(opt =>
-      opt.setName('reason')
-        .setDescription('Reason for the ban')
-        .setRequired(false)
-    )
-    .addIntegerOption(opt =>
-      opt.setName('delete_days')
-        .setDescription('Days of message history to delete (0 to 7)')
-        .setMinValue(0)
-        .setMaxValue(7)
-        .setRequired(false)
-    ),
+  data,
+  category: 'moderation',
+  emoji: 'shield',
 
-  aliases: ['b'],
-
-  async executeSlash(interaction) {
-    const targetUser = interaction.options.getUser('user');
-    const reason = interaction.options.getString('reason') || 'No reason specified';
-    const deleteDays = interaction.options.getInteger('delete_days') || 0;
-
-    const { guild, member: modMember } = interaction;
-
-    if (targetUser.id === interaction.user.id) {
-      return interaction.reply({ embeds: [errorEmbed('Action Denied', 'You cannot ban yourself!')], ephemeral: true });
-    }
-
-    if (targetUser.id === guild.ownerId) {
-      return interaction.reply({ embeds: [errorEmbed('Action Denied', 'You cannot ban the server owner!')], ephemeral: true });
-    }
-
-    const targetMember = await guild.members.fetch(targetUser.id).catch(() => null);
-
-    if (targetMember) {
-      if (!targetMember.bannable) {
-        return interaction.reply({
-          embeds: [errorEmbed('Hierarchy Error', 'I cannot ban this user because their role is equal to or higher than mine!')],
-          ephemeral: true,
-        });
-      }
-
-      if (modMember.roles.highest.position <= targetMember.roles.highest.position && modMember.id !== guild.ownerId) {
-        return interaction.reply({
-          embeds: [errorEmbed('Hierarchy Error', 'You cannot ban someone with an equal or higher role than you!')],
-          ephemeral: true,
-        });
-      }
-
-      // Try sending a DM
-      await targetUser.send(`🌸 You were banned from **${guild.name}**.\n**Reason:** ${reason}`).catch(() => null);
-    }
-
-    await guild.members.ban(targetUser.id, {
-      reason: `${reason} (Banned by ${interaction.user.tag})`,
-      deleteMessageSeconds: deleteDays * 24 * 60 * 60,
-    });
-
-    const modView = buildModEmbed('Banned', targetUser, interaction.user, reason);
-    return interaction.reply({ embeds: [modView.embed], files: modView.files });
+  prefix: {
+    aliases: ['vetar'],
+    async parse(message, rawArgs) {
+      const { user, rest } = await args.userAndRest(message, rawArgs);
+      return { options: { user, reason: rest || null } };
+    },
   },
 
-  async executePrefix(message, args) {
-    if (!message.member.permissions.has(PermissionFlagsBits.BanMembers)) {
-      return message.reply({ embeds: [errorEmbed('Permission Denied', 'You need `Ban Members` permission to use this command.')] });
-    }
+  async run(ctx) {
+    const denied = mod.requirePermission(ctx, PermissionFlagsBits.BanMembers);
+    if (denied) return ctx.reply(denied);
+    const user = ctx.opt.user('user');
+    if (!user) return ctx.reply(ui.message(ui.notice('info', ctx.t('common.usageTitle'), '`/banear usuario: motivo:` · `-ban @alguien motivo`'), { ephemeral: true }));
+    const member = await ctx.guild.members.fetch(user.id).catch(() => null);
+    const blocked = mod.checkTarget(ctx, user, member, 'bannable');
+    if (blocked) return ctx.reply(blocked);
 
-    const targetUser = message.mentions.users.first() || (args[0] ? await message.client.users.fetch(args[0]).catch(() => null) : null);
-    if (!targetUser) {
-      return message.reply({ embeds: [errorEmbed('Usage', '`-ban <@user|ID> [reason]`')] });
-    }
-
-    const reason = args.slice(1).join(' ') || 'No reason specified';
-    const { guild, member: modMember } = message;
-
-    if (targetUser.id === message.author.id) {
-      return message.reply({ embeds: [errorEmbed('Action Denied', 'You cannot ban yourself!')] });
-    }
-
-    const targetMember = await guild.members.fetch(targetUser.id).catch(() => null);
-    if (targetMember) {
-      if (!targetMember.bannable) {
-        return message.reply({ embeds: [errorEmbed('Hierarchy Error', 'I cannot ban this user because their role is higher than mine.')] });
-      }
-      if (modMember.roles.highest.position <= targetMember.roles.highest.position && modMember.id !== guild.ownerId) {
-        return message.reply({ embeds: [errorEmbed('Hierarchy Error', 'You cannot ban someone with an equal or higher role.')] });
-      }
-      await targetUser.send(`🌸 You were banned from **${guild.name}**.\n**Reason:** ${reason}`).catch(() => null);
-    }
-
-    await guild.members.ban(targetUser.id, { reason: `${reason} (Banned by ${message.author.tag})` });
-    const modView = buildModEmbed('Banned', targetUser, message.author, reason);
-    return message.reply({ embeds: [modView.embed], files: modView.files });
+    const reason = ctx.opt.string('reason');
+    if (member) await mod.notifyMember(user, ctx.locale, { guild: ctx.guild, action: 'ban', reason });
+    await ctx.guild.members.ban(user.id, {
+      reason: `${reason ?? '—'} (${ctx.user.tag})`.slice(0, 512),
+      deleteMessageSeconds: (ctx.opt.integer('delete_days') ?? 0) * 86400,
+    });
+    return mod.respond(ctx, { action: 'ban', target: user, moderator: ctx.user, reason });
   },
 };

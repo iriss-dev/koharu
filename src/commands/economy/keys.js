@@ -1,98 +1,59 @@
+'use strict';
+
 const { SlashCommandBuilder, PermissionFlagsBits } = require('discord.js');
+const { loc } = require('../../core/slash');
+const ui = require('../../core/ui');
+const args = require('../../core/args');
 const db = require('../../database/db');
-const { successEmbed, errorEmbed } = require('../../utils/embeds');
+const { L } = require('../../features/economy');
+
+const data = loc(new SlashCommandBuilder(), ['keys', 'llaves'], ['Event keys for custom roles and prizes', 'Llaves de evento para roles personalizados y premios'])
+  .addSubcommand(sub => loc(sub, ['check', 'ver'], ['How many keys someone has', 'Cuántas llaves tiene alguien'])
+    .addUserOption(opt => loc(opt, ['user', 'usuario'], ['Who', 'Quién'])))
+  .addSubcommand(sub => loc(sub, ['grant', 'dar'], ['Give keys (admins)', 'Dar llaves (admins)'])
+    .addUserOption(opt => loc(opt, ['user', 'usuario'], ['Who', 'Quién']).setRequired(true))
+    .addIntegerOption(opt => loc(opt, ['amount', 'cantidad'], ['How many', 'Cuántas']).setRequired(true).setMinValue(1).setMaxValue(1000)))
+  .addSubcommand(sub => loc(sub, ['revoke', 'quitar'], ['Take keys away (admins)', 'Quitar llaves (admins)'])
+    .addUserOption(opt => loc(opt, ['user', 'usuario'], ['Who', 'Quién']).setRequired(true))
+    .addIntegerOption(opt => loc(opt, ['amount', 'cantidad'], ['How many', 'Cuántas']).setRequired(true).setMinValue(1).setMaxValue(1000)));
 
 module.exports = {
-  data: new SlashCommandBuilder()
-    .setName('keys')
-    .setDescription('Manage administrative Event Keys (🔑) for special roles and perks')
-    .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild)
-    .addSubcommand(sub =>
-      sub.setName('grant')
-        .setDescription('Grant Event Keys to a member')
-        .addUserOption(opt => opt.setName('user').setDescription('Target member').setRequired(true))
-        .addIntegerOption(opt => opt.setName('amount').setDescription('Number of keys to grant').setMinValue(1).setRequired(true))
-    )
-    .addSubcommand(sub =>
-      sub.setName('revoke')
-        .setDescription('Revoke Event Keys from a member')
-        .addUserOption(opt => opt.setName('user').setDescription('Target member').setRequired(true))
-        .addIntegerOption(opt => opt.setName('amount').setDescription('Number of keys to revoke').setMinValue(1).setRequired(true))
-    )
-    .addSubcommand(sub =>
-      sub.setName('check')
-        .setDescription('Check how many Event Keys a member holds')
-        .addUserOption(opt => opt.setName('user').setDescription('Target member').setRequired(true))
-    ),
+  data,
+  category: 'economy',
+  emoji: 'key',
 
-  aliases: ['key', 'eventkeys'],
-
-  async executeSlash(interaction) {
-    const sub = interaction.options.getSubcommand();
-    const target = interaction.options.getUser('user');
-
-    if (sub === 'grant') {
-      const amount = interaction.options.getInteger('amount');
-      const updated = db.modifyKeys(target.id, amount);
-      return interaction.reply({
-        embeds: [successEmbed('Keys Granted', `Awarded **+${amount} Event Key(s)** 🔑 to <@${target.id}>.\nTotal balance: **${updated.keys} keys**.`)]
-      });
-    }
-
-    if (sub === 'revoke') {
-      const amount = interaction.options.getInteger('amount');
-      const current = db.getUser(target.id);
-      const toRemove = Math.min(amount, current.keys);
-      const updated = db.modifyKeys(target.id, -toRemove);
-      return interaction.reply({
-        embeds: [successEmbed('Keys Revoked', `Deducted **${toRemove} Event Key(s)** 🔑 from <@${target.id}>.\nRemaining balance: **${updated.keys} keys**.`)]
-      });
-    }
-
-    if (sub === 'check') {
-      const current = db.getUser(target.id);
-      return interaction.reply({
-        embeds: [successEmbed('Key Balance', `<@${target.id}> currently holds **${current.keys} Event Key(s)** 🔑.`)]
-      });
-    }
+  prefix: {
+    aliases: ['key', 'eventkeys'],
+    async parse(message, rawArgs) {
+      const sub = { grant: 'grant', dar: 'grant', revoke: 'revoke', quitar: 'revoke', check: 'check', ver: 'check' }[rawArgs[0]?.toLowerCase()] ?? 'check';
+      const rest = rawArgs[0] && ['grant', 'dar', 'revoke', 'quitar', 'check', 'ver'].includes(rawArgs[0].toLowerCase()) ? rawArgs.slice(1) : rawArgs;
+      const { user } = await args.userAndRest(message, rest);
+      const amount = rest.map(a => Number.parseInt(a, 10)).find(v => Number.isFinite(v) && v > 0) ?? null;
+      return { sub, options: { user, amount } };
+    },
   },
 
-  async executePrefix(message, args) {
-    if (!message.member.permissions.has(PermissionFlagsBits.ManageGuild)) {
-      return message.reply({ embeds: [errorEmbed('Permission Denied', 'You need `Manage Server` permissions to use this command.')] });
-    }
+  async run(ctx) {
+    const locale = ctx.locale;
+    const sub = ctx.sub ?? 'check';
+    const target = ctx.opt.user('user') ?? ctx.user;
+    const title = L(locale, 'keysTitle');
 
-    const action = args[0]?.toLowerCase();
-    const target = message.mentions.users.first();
-    const amount = parseInt(args[2], 10);
-
-    if (!action || !target || (action !== 'check' && (isNaN(amount) || amount <= 0))) {
-      return message.reply({
-        embeds: [errorEmbed('Usage', '`-keys grant <@user> <amount>`\n`-keys revoke <@user> <amount>`\n`-keys check <@user>`')]
-      });
+    if (sub === 'check') {
+      const total = db.member(ctx.guild.id, target.id).keys;
+      return ctx.reply(ui.message(ui.notice('info', title, L(locale, 'keysCheck', { user: `<@${target.id}>`, total }))));
     }
-
-    if (action === 'grant') {
-      const updated = db.modifyKeys(target.id, amount);
-      return message.reply({
-        embeds: [successEmbed('Keys Granted', `Awarded **+${amount} Event Key(s)** 🔑 to <@${target.id}>.\nTotal balance: **${updated.keys} keys**.`)]
-      });
+    if (!ctx.member.permissions.has(PermissionFlagsBits.ManageGuild)) {
+      return ctx.reply(ui.message(ui.notice('error', title, ctx.t('common.missingPerm', { perm: 'Manage Server' })), { ephemeral: true }));
     }
-
-    if (action === 'revoke') {
-      const current = db.getUser(target.id);
-      const toRemove = Math.min(amount, current.keys);
-      const updated = db.modifyKeys(target.id, -toRemove);
-      return message.reply({
-        embeds: [successEmbed('Keys Revoked', `Deducted **${toRemove} Event Key(s)** 🔑 from <@${target.id}>.\nRemaining balance: **${updated.keys} keys**.`)]
-      });
+    const amount = ctx.opt.integer('amount');
+    if (!amount || amount <= 0) return ctx.reply(ui.message(ui.notice('info', ctx.t('common.usageTitle'), '`/llaves dar usuario: cantidad:`'), { ephemeral: true }));
+    if (sub === 'grant') {
+      const row = db.addKeys(ctx.guild.id, target.id, amount);
+      return ctx.reply(ui.message(ui.notice('success', title, L(locale, 'keysGranted', { n: amount, user: `<@${target.id}>`, total: row.keys }))));
     }
-
-    if (action === 'check') {
-      const current = db.getUser(target.id);
-      return message.reply({
-        embeds: [successEmbed('Key Balance', `<@${target.id}> currently holds **${current.keys} Event Key(s)** 🔑.`)]
-      });
-    }
-  }
+    const before = db.member(ctx.guild.id, target.id).keys;
+    const row = db.addKeys(ctx.guild.id, target.id, -amount);
+    return ctx.reply(ui.message(ui.notice('success', title, L(locale, 'keysRevoked', { n: before - row.keys, user: `<@${target.id}>`, total: row.keys }))));
+  },
 };

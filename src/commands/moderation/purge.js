@@ -1,88 +1,51 @@
+'use strict';
+
 const { SlashCommandBuilder, PermissionFlagsBits } = require('discord.js');
-const { successEmbed, errorEmbed } = require('../../utils/embeds');
+const { loc } = require('../../core/slash');
+const ui = require('../../core/ui');
+const args = require('../../core/args');
+const mod = require('../../features/moderation');
+
+const data = loc(new SlashCommandBuilder(), ['purge', 'limpiar'], ['Bulk delete recent messages', 'Borra mensajes recientes en bloque'])
+  .setDefaultMemberPermissions(PermissionFlagsBits.ManageMessages)
+  .addIntegerOption(opt => loc(opt, ['amount', 'cantidad'], ['How many (1–100)', 'Cuántos (1–100)']).setRequired(true).setMinValue(1).setMaxValue(100))
+  .addUserOption(opt => loc(opt, ['user', 'usuario'], ['Only messages from this person', 'Solo mensajes de esta persona']));
 
 module.exports = {
-  data: new SlashCommandBuilder()
-    .setName('purge')
-    .setDescription('Bulk delete messages from the current channel')
-    .setDefaultMemberPermissions(PermissionFlagsBits.ManageMessages)
-    .addIntegerOption(opt =>
-      opt.setName('amount')
-        .setDescription('Number of messages to delete (1 to 100)')
-        .setMinValue(1)
-        .setMaxValue(100)
-        .setRequired(true)
-    )
-    .addUserOption(opt =>
-      opt.setName('user')
-        .setDescription('Only delete messages from this specific user')
-        .setRequired(false)
-    ),
+  data,
+  category: 'moderation',
+  emoji: 'sparkle',
 
-  aliases: ['clear', 'clean'],
-
-  async executeSlash(interaction) {
-    const amount = interaction.options.getInteger('amount');
-    const filterUser = interaction.options.getUser('user');
-    const channel = interaction.channel;
-
-    await interaction.deferReply({ ephemeral: true });
-
-    const messages = await channel.messages.fetch({ limit: amount });
-    const toDelete = filterUser
-      ? messages.filter(m => m.author.id === filterUser.id)
-      : messages;
-
-    const deleted = await channel.bulkDelete(toDelete, true).catch(err => {
-      console.error('[Purge] Bulk delete error:', err);
-      return null;
-    });
-
-    if (!deleted) {
-      return interaction.editReply({
-        embeds: [errorEmbed('Purge Failed', 'Could not delete messages. Note: Discord prevents deleting messages older than 14 days.')]
-      });
-    }
-
-    const filterText = filterUser ? ` from <@${filterUser.id}>` : '';
-    return interaction.editReply({
-      embeds: [successEmbed('Messages Purged', `Successfully cleared **${deleted.size} message(s)**${filterText}!`)],
-    });
+  prefix: {
+    aliases: ['clear', 'borrar'],
+    async parse(message, rawArgs) {
+      const { user, rest } = await args.userAndRest(message, rawArgs);
+      const amount = Number.parseInt(rest, 10);
+      return { options: { amount: Number.isFinite(amount) ? Math.min(Math.max(amount, 1), 100) : null, user } };
+    },
   },
 
-  async executePrefix(message, args) {
-    if (!message.member.permissions.has(PermissionFlagsBits.ManageMessages)) {
-      return message.reply({ embeds: [errorEmbed('Permission Denied', 'You need `Manage Messages` permission.')] });
-    }
+  async run(ctx) {
+    const denied = mod.requirePermission(ctx, PermissionFlagsBits.ManageMessages);
+    if (denied) return ctx.reply(denied);
+    const amount = ctx.opt.integer('amount');
+    if (!amount) return ctx.reply(ui.message(ui.notice('info', ctx.t('common.usageTitle'), '`/limpiar cantidad: usuario:` · `-clear 20`'), { ephemeral: true }));
+    const user = ctx.opt.user('user');
 
-    const amount = parseInt(args[0], 10);
-    if (isNaN(amount) || amount < 1 || amount > 100) {
-      return message.reply({ embeds: [errorEmbed('Usage', '`-purge <amount (1-100)> [@user]`')] });
-    }
+    if (!ctx.isInteraction) await ctx.message.delete().catch(() => null);
+    else await ctx.defer({ ephemeral: true });
 
-    const filterUser = message.mentions.users.first();
-    const channel = message.channel;
+    const fetched = await ctx.channel.messages.fetch({ limit: 100 });
+    const cutoff = Date.now() - 14 * 24 * 60 * 60 * 1000 + 60_000;
+    const candidates = [...fetched.values()].filter(m => (!user || m.author.id === user.id) && m.createdTimestamp > cutoff).slice(0, amount);
+    const deleted = candidates.length ? await ctx.channel.bulkDelete(candidates, true) : new Map();
 
-    // Delete invoking command message first
-    await message.delete().catch(() => null);
-
-    const messages = await channel.messages.fetch({ limit: amount });
-    const toDelete = filterUser
-      ? messages.filter(m => m.author.id === filterUser.id)
-      : messages;
-
-    const deleted = await channel.bulkDelete(toDelete, true).catch(() => null);
-    if (!deleted) {
-      return message.channel.send({
-        embeds: [errorEmbed('Purge Failed', 'Messages older than 14 days cannot be bulk deleted.')]
-      }).then(msg => setTimeout(() => msg.delete().catch(() => null), 4000));
-    }
-
-    const filterText = filterUser ? ` from <@${filterUser.id}>` : '';
-    const confirmation = await message.channel.send({
-      embeds: [successEmbed('Chat Cleaned', `Deleted **${deleted.size} message(s)**${filterText}!`)]
-    });
-
-    setTimeout(() => confirmation.delete().catch(() => null), 4000);
+    const text = mod.L(ctx.locale, 'purged', { n: deleted.size, from: user ? mod.L(ctx.locale, 'purgedFrom', { user: `<@${user.id}>` }) : '' })
+      + (deleted.size < amount ? `\n-# ${mod.L(ctx.locale, 'purgeOld')}` : '');
+    const payload = ui.message(ui.notice('success', mod.L(ctx.locale, 'actions.purge'), text), { ephemeral: true });
+    if (ctx.isInteraction) return ctx.reply(payload);
+    const note = await ctx.channel.send(payload).catch(() => null);
+    setTimeout(() => note?.delete().catch(() => null), 4000).unref?.();
+    return note;
   },
 };

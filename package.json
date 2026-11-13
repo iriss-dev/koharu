@@ -1,23 +1,28 @@
 {
   "name": "koharu",
-  "version": "1.0.0",
-  "description": "A cute, feature-packed community Discord bot with dynamic custom roles, dual-gradient booster perks, economy, blackjack & administrative event keys.",
+  "version": "2.0.0",
+  "description": "Cute, bilingual (es/en) Discord bot: anime & manga lookups, fashion help, game deals, anime interactions, per-server economy, custom gradient roles and moderation, built on Components V2 with its own emoji set.",
   "main": "src/index.js",
   "scripts": {
     "start": "node src/index.js",
     "dev": "node --watch src/index.js",
-    "test": "node --test test/*.test.js"
+    "test": "node --test test/*.test.js",
+    "emojis:render": "node scripts/emojis/render.js",
+    "preview": "node scripts/preview/render.js"
   },
   "keywords": [
     "discord",
     "discord-bot",
     "discord-js",
+    "components-v2",
+    "anime",
+    "anilist",
+    "fashion",
+    "game-deals",
     "custom-roles",
     "economy",
-    "blackjack",
     "nekotina",
-    "anime",
-    "community-bot"
+    "bilingual"
   ],
   "author": "Iris <iriss.smith08@proton.me> (https://github.com/iriss-dev)",
   "license": "GPL-3.0-or-later",
@@ -26,10 +31,7 @@
   },
   "dependencies": {
     "better-sqlite3": "^12.11.1",
-    "discord.js": "^14.16.3",
+    "discord.js": "^14.28.1",
     "dotenv": "^16.4.5"
-  },
-  "optionalDependencies": {
-    "@napi-rs/canvas": "^0.1.60"
   }
 }

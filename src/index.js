@@ -1,99 +1,76 @@
+'use strict';
+
 const fs = require('fs');
 const path = require('path');
 const { Client, GatewayIntentBits, Partials } = require('discord.js');
 const config = require('./config');
 const db = require('./database/db');
+const registry = require('./core/registry');
+const scheduler = require('./core/scheduler');
 
-// Global safety error handlers
-process.on('unhandledRejection', (reason) => {
-  console.error('[Koharu] Unhandled Promise Rejection:', reason);
-});
+process.on('unhandledRejection', reason => console.error('[Koharu] Unhandled rejection:', reason));
+process.on('uncaughtException', error => console.error('[Koharu] Uncaught exception:', error));
 
-process.on('uncaughtException', (error) => {
-  console.error('[Koharu] Uncaught Exception:', error);
-});
+const STANDARD_INTENTS = [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMessages];
+// Prefix commands (-abrazo @alguien) need to read message content.
+const PRIVILEGED_INTENTS = [...STANDARD_INTENTS, GatewayIntentBits.MessageContent, GatewayIntentBits.GuildMembers];
 
-function initClient(intents) {
+function createClient(intents) {
   const client = new Client({
     intents,
-    partials: [Partials.Channel, Partials.Message, Partials.GuildMember],
+    partials: [Partials.Channel, Partials.GuildMember],
+    allowedMentions: { parse: ['users'], repliedUser: false },
   });
-
-  const eventsPath = path.join(__dirname, 'events');
-  const eventFiles = fs.readdirSync(eventsPath).filter(file => file.endsWith('.js'));
-
-  for (const file of eventFiles) {
-    const filePath = path.join(eventsPath, file);
-    const event = require(filePath);
-
-    if (event.once) {
-      client.once(event.name, (...args) => event.execute(...args, client));
-    } else {
-      client.on(event.name, (...args) => event.execute(...args, client));
-    }
+  const dir = path.join(__dirname, 'events');
+  for (const file of fs.readdirSync(dir).filter(name => name.endsWith('.js'))) {
+    const event = require(path.join(dir, file));
+    const run = (...args) => Promise.resolve(event.execute(...args)).catch(err => console.error(`[Event] ${event.name}:`, err));
+    if (event.once) client.once(event.name, run);
+    else client.on(event.name, run);
   }
-
   return client;
 }
 
-const standardIntents = [
-  GatewayIntentBits.Guilds,
-  GatewayIntentBits.GuildMessages,
-];
+let client = null;
 
-const privilegedIntents = [
-  GatewayIntentBits.Guilds,
-  GatewayIntentBits.GuildMessages,
-  GatewayIntentBits.MessageContent,
-  GatewayIntentBits.GuildMembers,
-];
-
-let activeClient = null;
-
-const shutdown = () => {
-  console.log('\n[Koharu] Gracefully stopping services...');
-  try {
-    db.close();
-    console.log('[Koharu] Database closed.');
-  } catch (err) {
-    console.error('[Koharu] Error closing database:', err);
-  }
-  if (activeClient) activeClient.destroy();
+function shutdown() {
+  console.log('\n[Koharu] Shutting down…');
+  scheduler.stopAll();
+  client?.destroy();
+  db.close();
   process.exit(0);
-};
-
+}
 process.on('SIGINT', shutdown);
 process.on('SIGTERM', shutdown);
 
 async function start() {
+  // Load every command up front so configuration mistakes fail fast.
+  const { commands, slashData } = registry.get();
+  console.log(`[Koharu] ${commands.size} commands loaded (${slashData.length} slash).`);
+
   if (!config.token) {
-    console.log('[Koharu] Bot initialized in dry-run mode (no DISCORD_TOKEN specified).');
+    console.log('[Koharu] No DISCORD_TOKEN set: commands loaded in dry-run mode, not connecting.');
     return;
   }
 
-  // Check if privileged intents are enabled or attempt standard first
-  const usePrivileged = process.env.ENABLE_PRIVILEGED_INTENTS === 'true';
-
   try {
-    const intentsToUse = usePrivileged ? privilegedIntents : standardIntents;
-    activeClient = initClient(intentsToUse);
-    await activeClient.login(config.token);
-
-    if (!usePrivileged) {
-      console.log('[Koharu] Running in Standard Mode (Slash Commands, Modals, Buttons active).');
-      console.log('[Koharu] Tip: Enable "Message Content" & "Server Members" in Discord Dev Portal, then set ENABLE_PRIVILEGED_INTENTS=true in .env to unlock prefix commands (-work).');
+    client = createClient(config.privilegedIntents ? PRIVILEGED_INTENTS : STANDARD_INTENTS);
+    await client.login(config.token);
+    if (!config.privilegedIntents) {
+      console.log('[Koharu] Slash commands only. Enable "Message Content" in the Developer Portal and set ENABLE_PRIVILEGED_INTENTS=true for prefix commands.');
     }
   } catch (err) {
-    if (err.message && err.message.includes('disallowed intents')) {
-      console.warn('[Koharu] Privileged intents disallowed by Discord. Falling back to Standard Mode...');
-      activeClient = initClient(standardIntents);
-      await activeClient.login(config.token);
+    if (/disallowed intents/i.test(err?.message ?? '')) {
+      console.warn('[Koharu] Privileged intents are not enabled in the Developer Portal; continuing with slash commands only.');
+      client = createClient(STANDARD_INTENTS);
+      await client.login(config.token);
     } else {
-      console.error('[Koharu] Fatal login error:', err);
+      console.error('[Koharu] Login failed:', err);
+      process.exitCode = 1;
     }
   }
 }
 
-start();
+if (require.main === module) start();
 
-module.exports = { initClient };
+module.exports = { createClient, start };

@@ -1,117 +1,48 @@
-const { SlashCommandBuilder, PermissionFlagsBits } = require('discord.js');
-const { parseDuration, formatDuration } = require('../../utils/duration');
-const { buildModEmbed, errorEmbed } = require('../../utils/embeds');
+'use strict';
 
-const MAX_TIMEOUT_MS = 28 * 24 * 60 * 60 * 1000; // Discord limit: 28 days
+const { SlashCommandBuilder, PermissionFlagsBits } = require('discord.js');
+const { loc } = require('../../core/slash');
+const ui = require('../../core/ui');
+const args = require('../../core/args');
+const mod = require('../../features/moderation');
+const { parseDuration, formatDuration } = require('../../utils/duration');
+
+const MAX = 28 * 24 * 60 * 60 * 1000;
+
+const data = loc(new SlashCommandBuilder(), ['timeout', 'aislar'], ['Time someone out for a while', 'Aísla a alguien por un tiempo'])
+  .setDefaultMemberPermissions(PermissionFlagsBits.ModerateMembers)
+  .addUserOption(opt => loc(opt, ['user', 'usuario'], ['Who', 'Quién']).setRequired(true))
+  .addStringOption(opt => loc(opt, ['duration', 'duración'], ['e.g. 10m, 2h, 1d (max 28d)', 'p. ej. 10m, 2h, 1d (máx. 28d)']).setRequired(true).setMaxLength(12))
+  .addStringOption(opt => loc(opt, ['reason', 'motivo'], ['Why', 'Por qué']).setMaxLength(400));
 
 module.exports = {
-  data: new SlashCommandBuilder()
-    .setName('timeout')
-    .setDescription('Temporarily isolate a member with a timeout')
-    .setDefaultMemberPermissions(PermissionFlagsBits.ModerateMembers)
-    .addUserOption(opt =>
-      opt.setName('user')
-        .setDescription('Target member to time out')
-        .setRequired(true)
-    )
-    .addStringOption(opt =>
-      opt.setName('duration')
-        .setDescription('Duration (e.g. 10m, 1h, 1d, 7d)')
-        .setRequired(true)
-    )
-    .addStringOption(opt =>
-      opt.setName('reason')
-        .setDescription('Reason for the timeout')
-        .setRequired(false)
-    ),
+  data,
+  category: 'moderation',
+  emoji: 'clock',
 
-  aliases: ['mute', 'shutup', 'to'],
-
-  async executeSlash(interaction) {
-    const targetUser = interaction.options.getUser('user');
-    const rawDuration = interaction.options.getString('duration');
-    const reason = interaction.options.getString('reason') || 'No reason specified';
-
-    const ms = parseDuration(rawDuration);
-    if (!ms || ms <= 0 || ms > MAX_TIMEOUT_MS) {
-      return interaction.reply({
-        embeds: [errorEmbed('Invalid Duration', 'Please provide a duration like `10m`, `2h`, `1d` (up to 28 days).')],
-        ephemeral: true,
-      });
-    }
-
-    const { guild, member: modMember } = interaction;
-    if (targetUser.id === interaction.user.id) {
-      return interaction.reply({ embeds: [errorEmbed('Action Denied', 'You cannot time out yourself!')], ephemeral: true });
-    }
-
-    const targetMember = await guild.members.fetch(targetUser.id).catch(() => null);
-    if (!targetMember) {
-      return interaction.reply({ embeds: [errorEmbed('User Not Found', 'Member not found in this server.')], ephemeral: true });
-    }
-
-    if (!targetMember.moderatable) {
-      return interaction.reply({
-        embeds: [errorEmbed('Hierarchy Error', 'I cannot moderate this member because their role is equal to or higher than mine!')],
-        ephemeral: true,
-      });
-    }
-
-    if (modMember.roles.highest.position <= targetMember.roles.highest.position && modMember.id !== guild.ownerId) {
-      return interaction.reply({
-        embeds: [errorEmbed('Hierarchy Error', 'You cannot moderate someone with an equal or higher role than you!')],
-        ephemeral: true,
-      });
-    }
-
-    const prettyDuration = formatDuration(ms);
-    await targetUser.send(`🌸 You have been timed out in **${guild.name}** for **${prettyDuration}**.\n**Reason:** ${reason}`).catch(() => null);
-    await targetMember.timeout(ms, `${reason} (Timed out by ${interaction.user.tag})`);
-
-    const modView = buildModEmbed('Timed Out', targetUser, interaction.user, reason, prettyDuration);
-    return interaction.reply({ embeds: [modView.embed], files: modView.files });
+  prefix: {
+    aliases: ['mute', 'silenciar', 'to'],
+    async parse(message, rawArgs) {
+      const { user, rest } = await args.userAndRest(message, rawArgs);
+      const [duration, ...reason] = rest.split(/\s+/).filter(Boolean);
+      return { options: { user, duration: duration ?? null, reason: reason.join(' ') || null } };
+    },
   },
 
-  async executePrefix(message, args) {
-    if (!message.member.permissions.has(PermissionFlagsBits.ModerateMembers)) {
-      return message.reply({ embeds: [errorEmbed('Permission Denied', 'You need `Moderate Members` permission to use this command.')] });
-    }
+  async run(ctx) {
+    const denied = mod.requirePermission(ctx, PermissionFlagsBits.ModerateMembers);
+    if (denied) return ctx.reply(denied);
+    const user = ctx.opt.user('user');
+    if (!user) return ctx.reply(ui.message(ui.notice('info', ctx.t('common.usageTitle'), '`/aislar usuario: duración: motivo:` · `-mute @alguien 10m motivo`'), { ephemeral: true }));
+    const ms = parseDuration(ctx.opt.string('duration') ?? '');
+    if (!ms || ms > MAX) return ctx.reply(ui.message(ui.notice('warn', ctx.t('common.errorTitle'), mod.L(ctx.locale, 'badDuration')), { ephemeral: true }));
+    const member = await ctx.guild.members.fetch(user.id).catch(() => null);
+    const blocked = mod.checkTarget(ctx, user, member, 'moderatable');
+    if (blocked) return ctx.reply(blocked);
 
-    const targetUser = message.mentions.users.first() || (args[0] ? await message.client.users.fetch(args[0]).catch(() => null) : null);
-    if (!targetUser || !args[1]) {
-      return message.reply({ embeds: [errorEmbed('Usage', '`-timeout <@user> <duration (e.g. 10m, 1h, 1d)> [reason]`')] });
-    }
-
-    const ms = parseDuration(args[1]);
-    if (!ms || ms <= 0 || ms > MAX_TIMEOUT_MS) {
-      return message.reply({ embeds: [errorEmbed('Invalid Duration', 'Duration must be between `10s` and `28d` (e.g. `10m`, `2h`, `1d`).')] });
-    }
-
-    const reason = args.slice(2).join(' ') || 'No reason specified';
-    const { guild, member: modMember } = message;
-
-    if (targetUser.id === message.author.id) {
-      return message.reply({ embeds: [errorEmbed('Action Denied', 'You cannot time out yourself!')] });
-    }
-
-    const targetMember = await guild.members.fetch(targetUser.id).catch(() => null);
-    if (!targetMember) {
-      return message.reply({ embeds: [errorEmbed('User Not Found', 'Member not found in this server.')] });
-    }
-
-    if (!targetMember.moderatable) {
-      return message.reply({ embeds: [errorEmbed('Hierarchy Error', 'I cannot moderate this member due to role hierarchy.')] });
-    }
-
-    if (modMember.roles.highest.position <= targetMember.roles.highest.position && modMember.id !== guild.ownerId) {
-      return message.reply({ embeds: [errorEmbed('Hierarchy Error', 'You cannot moderate someone with an equal or higher role.')] });
-    }
-
-    const prettyDuration = formatDuration(ms);
-    await targetUser.send(`🌸 You have been timed out in **${guild.name}** for **${prettyDuration}**.\n**Reason:** ${reason}`).catch(() => null);
-    await targetMember.timeout(ms, `${reason} (Timed out by ${message.author.tag})`);
-
-    const modView = buildModEmbed('Timed Out', targetUser, message.author, reason, prettyDuration);
-    return message.reply({ embeds: [modView.embed], files: modView.files });
+    const reason = ctx.opt.string('reason');
+    await member.timeout(ms, `${reason ?? '—'} (${ctx.user.tag})`.slice(0, 512));
+    await mod.notifyMember(user, ctx.locale, { guild: ctx.guild, action: 'timeout', reason });
+    return mod.respond(ctx, { action: 'timeout', target: user, moderator: ctx.user, reason, duration: formatDuration(ms) });
   },
 };

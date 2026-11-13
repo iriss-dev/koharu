@@ -1,49 +1,28 @@
+'use strict';
+
 const { SlashCommandBuilder } = require('discord.js');
-const db = require('../../database/db');
-const { buildBalanceEmbed } = require('../../utils/embeds');
+const { loc } = require('../../core/slash');
+const args = require('../../core/args');
+const economy = require('../../features/economy');
 
-async function showBalance(targetMember, guild) {
-  const user = db.getUser(targetMember.id);
-  let roleDisplay = null;
-
-  if (user.custom_role_id) {
-    const role = guild.roles.cache.get(user.custom_role_id);
-    if (role) {
-      roleDisplay = `${role.toString()} (\`${role.hexColor}\`)`;
-    }
-  }
-
-  return buildBalanceEmbed(user, targetMember, roleDisplay);
-}
+const data = loc(new SlashCommandBuilder(), ['balance', 'saldo'], ['Coins, bank, event keys and rank', 'Monedas, banco, llaves de evento y puesto'])
+  .addUserOption(opt => loc(opt, ['user', 'usuario'], ['Whose balance', 'De quién']));
 
 module.exports = {
-  data: new SlashCommandBuilder()
-    .setName('balance')
-    .setDescription('Check your coin balance, bank savings, and event keys')
-    .addUserOption(opt =>
-      opt.setName('user')
-        .setDescription('Target member to inspect')
-        .setRequired(false)
-    ),
+  data,
+  category: 'economy',
+  emoji: 'coin',
 
-  aliases: ['bal', 'b', 'money'],
-
-  async executeSlash(interaction) {
-    const target = interaction.options.getMember('user') || interaction.member;
-    const view = await showBalance(target, interaction.guild);
-    return interaction.reply({ embeds: [view.embed], files: view.files });
+  prefix: {
+    aliases: ['bal', 'money', 'dinero', 'b'],
+    async parse(message, rawArgs) {
+      return { options: { user: (await args.user(message, rawArgs[0])) ?? null } };
+    },
   },
 
-  async executePrefix(message, args) {
-    let target = message.member;
-    if (message.mentions.members.first()) {
-      target = message.mentions.members.first();
-    } else if (args[0]) {
-      const match = await message.guild.members.fetch(args[0]).catch(() => null);
-      if (match) target = match;
-    }
-
-    const view = await showBalance(target, message.guild);
-    return message.reply({ embeds: [view.embed], files: view.files });
+  async run(ctx) {
+    const user = ctx.opt.user('user') ?? ctx.user;
+    const member = await ctx.guild.members.fetch(user.id).catch(() => null);
+    return ctx.reply(economy.balanceMessage(ctx.locale, { guild: ctx.guild, user, member }));
   },
 };

@@ -1,63 +1,39 @@
+'use strict';
+
 const { SlashCommandBuilder, PermissionFlagsBits } = require('discord.js');
-const { successEmbed, errorEmbed } = require('../../utils/embeds');
+const { loc } = require('../../core/slash');
+const ui = require('../../core/ui');
+const args = require('../../core/args');
+const mod = require('../../features/moderation');
+
+const data = loc(new SlashCommandBuilder(), ['untimeout', 'desaislar'], ['Lift a timeout', 'Retira un aislamiento'])
+  .setDefaultMemberPermissions(PermissionFlagsBits.ModerateMembers)
+  .addUserOption(opt => loc(opt, ['user', 'usuario'], ['Who', 'Quién']).setRequired(true))
+  .addStringOption(opt => loc(opt, ['reason', 'motivo'], ['Why', 'Por qué']).setMaxLength(400));
 
 module.exports = {
-  data: new SlashCommandBuilder()
-    .setName('untimeout')
-    .setDescription('Remove timeout isolation from a member')
-    .setDefaultMemberPermissions(PermissionFlagsBits.ModerateMembers)
-    .addUserOption(opt =>
-      opt.setName('user')
-        .setDescription('Target member to unmute')
-        .setRequired(true)
-    )
-    .addStringOption(opt =>
-      opt.setName('reason')
-        .setDescription('Reason for removing timeout')
-        .setRequired(false)
-    ),
+  data,
+  category: 'moderation',
+  emoji: 'check',
 
-  aliases: ['unmute', 'unto'],
-
-  async executeSlash(interaction) {
-    const targetUser = interaction.options.getUser('user');
-    const reason = interaction.options.getString('reason') || 'Timeout removed by moderator';
-    const targetMember = await interaction.guild.members.fetch(targetUser.id).catch(() => null);
-
-    if (!targetMember) {
-      return interaction.reply({ embeds: [errorEmbed('User Not Found', 'Member not found.')], ephemeral: true });
-    }
-
-    if (!targetMember.isCommunicationDisabled()) {
-      return interaction.reply({ embeds: [errorEmbed('Not Timed Out', 'This member does not have an active timeout.')], ephemeral: true });
-    }
-
-    await targetMember.timeout(null, `${reason} (Removed by ${interaction.user.tag})`);
-    return interaction.reply({
-      embeds: [successEmbed('Timeout Removed', `Removed timeout for <@${targetUser.id}>.\n**Reason:** ${reason}`)],
-    });
+  prefix: {
+    aliases: ['unmute', 'desilenciar'],
+    async parse(message, rawArgs) {
+      const { user, rest } = await args.userAndRest(message, rawArgs);
+      return { options: { user, reason: rest || null } };
+    },
   },
 
-  async executePrefix(message, args) {
-    if (!message.member.permissions.has(PermissionFlagsBits.ModerateMembers)) {
-      return message.reply({ embeds: [errorEmbed('Permission Denied', 'You need `Moderate Members` permission.')] });
-    }
-
-    const targetUser = message.mentions.users.first() || (args[0] ? await message.client.users.fetch(args[0]).catch(() => null) : null);
-    if (!targetUser) {
-      return message.reply({ embeds: [errorEmbed('Usage', '`-untimeout <@user>`')] });
-    }
-
-    const targetMember = await message.guild.members.fetch(targetUser.id).catch(() => null);
-    if (!targetMember || !targetMember.isCommunicationDisabled()) {
-      return message.reply({ embeds: [errorEmbed('Not Timed Out', 'This member does not have an active timeout.')] });
-    }
-
-    const reason = args.slice(1).join(' ') || 'Timeout removed by moderator';
-    await targetMember.timeout(null, `${reason} (Removed by ${message.author.tag})`);
-
-    return message.reply({
-      embeds: [successEmbed('Timeout Removed', `Removed timeout for <@${targetUser.id}>.`)],
-    });
+  async run(ctx) {
+    const denied = mod.requirePermission(ctx, PermissionFlagsBits.ModerateMembers);
+    if (denied) return ctx.reply(denied);
+    const user = ctx.opt.user('user');
+    if (!user) return ctx.reply(ui.message(ui.notice('info', ctx.t('common.usageTitle'), '`/desaislar usuario:` · `-unmute @alguien`'), { ephemeral: true }));
+    const member = await ctx.guild.members.fetch(user.id).catch(() => null);
+    const blocked = mod.checkTarget(ctx, user, member, 'moderatable');
+    if (blocked) return ctx.reply(blocked);
+    const reason = ctx.opt.string('reason');
+    await member.timeout(null, `${reason ?? '—'} (${ctx.user.tag})`.slice(0, 512));
+    return mod.respond(ctx, { action: 'untimeout', target: user, moderator: ctx.user, reason });
   },
 };
