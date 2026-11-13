@@ -74,6 +74,9 @@ The outfit generator draws from 110 tagged pieces and never returns an incomplet
 ### 🌟 Levels
 Members earn 15–25 XP for chatting (once a minute, so spam does not pay; commands earn nothing). Every level-up is announced with a cute GIF and pays `level × 100` coins. `/nivel ver` shows a progress bar and rank, `/nivel top` the server ranking, `/nivel fijar` lets admins adjust it. `/config niveles` turns levels off or sends the announcements to one channel. Works without privileged intents.
 
+### 🖌️ Picture cards
+`/ship`, `/nivel`, `/perfil` and every level-up come with a picture drawn on the fly with [@napi-rs/canvas](https://github.com/Brooooooklyn/canvas): an anime background, the avatars, a heart that fills up to the ship percentage, a glossy XP bar with confetti on level-ups and a profile banner with stat chips and your partner. Text uses the bundled Poppins font (SIL Open Font License, see `assets/fonts/OFL.txt`). If the canvas package is missing, the same commands answer with their text version.
+
 ### 🎀 Fun
 `/kawaii` (neko, waifu, kitsune, husbando, with an **Another** button and artist credit) · `/ship` (stable love meter and ship name) · `/bola8` · `/puntuar` · `/elegir` · `/dado` (`-dado 2d20`) · `/avatar`
 
@@ -141,7 +144,7 @@ All five are free and need no API key. Koharu caches responses and backs off on 
 ## Development
 
 ```bash
-npm test             # 105 tests: every command end to end, Discord payload limits, translations, economy, casino odds
+npm test             # 108 tests: every command end to end, Discord payload limits, translations, economy, casino odds
 npm run preview      # screenshots of real replies → docs/preview/
 npm run emojis:render -- --sheet sheet.png   # re-render the emoji set (needs Playwright)
 ```

@@ -10,6 +10,7 @@ const ui = require('../../core/ui');
 const router = require('../../core/router');
 const { register, t } = require('../../core/i18n');
 const kawaii = require('../../services/kawaii');
+const cards = require('../cards');
 const { escapeMarkdown, cleanUserText, pickOne } = require('../../utils/text');
 
 register('fun', {
@@ -114,13 +115,25 @@ function shipName(nameA, nameB) {
   return `${a.slice(0, Math.ceil(a.length / 2))}${b.slice(Math.floor(b.length / 2))}`;
 }
 
+/**
+ * @param {string} locale
+ * @param {{ id: string, name: string, avatar?: string|null }} a
+ * @param {{ id: string, name: string, avatar?: string|null }} b
+ */
 async function shipMessage(locale, a, b) {
   const percent = a.id === b.id ? 100 : shipPercent(a.id, b.id);
   const levels = L(locale, 'shipLevels');
   const verdict = levels[Math.min(levels.length - 1, Math.floor((percent / 101) * levels.length))];
   const filled = Math.round(percent / 10);
   const bar = `${'💗'.repeat(filled)}${'🤍'.repeat(10 - filled)}`;
-  const gif = await kawaii.mood(percent >= 60 ? 'love' : percent >= 30 ? 'thinking' : 'sad').catch(() => null);
+  const [gif, image] = await Promise.all([
+    kawaii.mood(percent >= 60 ? 'love' : percent >= 30 ? 'thinking' : 'sad').catch(() => null),
+    cards.renderShip({ a, b, percent, seed: [a.id, b.id].sort().join(':') }).catch(err => {
+      console.error('[Cards] ship:', err.message);
+      return null;
+    }),
+  ]);
+  const picture = image ? ui.bufferAttachment(image, 'ship.png') : null;
   return ui.message(ui.card({
     accent: percent >= 60 ? 'rose' : percent >= 30 ? 'primary' : 'lavender',
     emoji: 'hearts',
@@ -132,8 +145,9 @@ async function shipMessage(locale, a, b) {
       ui.quote(verdict),
     ].join('\n'),
     thumbnail: gif?.url,
+    body: picture ? [ui.gallery({ url: picture.url, description: `${a.name} + ${b.name}: ${percent}%` })] : [],
     footer: L(locale, 'shipName', { name: escapeMarkdown(shipName(a.name, b.name)) }),
-  }));
+  }), { files: picture ? [picture.attachment] : [] });
 }
 
 function rateMessage(locale, thing) {

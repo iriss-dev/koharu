@@ -39,13 +39,15 @@ module.exports = {
       }
       const user = ctx.opt.user('user');
       const level = ctx.opt.integer('level') ?? 0;
+      await ctx.defer();
       db.setXp(ctx.guild.id, user.id, levels.xpForLevel(level));
       const member = await ctx.guild.members.fetch(user.id).catch(() => null);
-      return ctx.reply(levels.rankMessage(ctx.locale, { guild: ctx.guild, user, member }));
+      return ctx.reply(await levels.rankMessage(ctx.locale, { guild: ctx.guild, user, member }));
     }
     const user = ctx.opt.user('user') ?? ctx.user;
     if (user.bot) return ctx.reply(ui.message(ui.notice('info', t(ctx.locale, 'levels.topTitle'), t(ctx.locale, 'levels.howTo')), { ephemeral: true }));
+    await ctx.defer();
     const member = await ctx.guild.members.fetch(user.id).catch(() => null);
-    return ctx.reply(levels.rankMessage(ctx.locale, { guild: ctx.guild, user, member }));
+    return ctx.reply(await levels.rankMessage(ctx.locale, { guild: ctx.guild, user, member }));
   },
 };

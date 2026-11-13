@@ -13,6 +13,7 @@ const fashionData = require('../../features/fashion/data');
 const social = require('../../features/social');
 const levels = require('../../features/levels');
 const marriage = require('../../features/marriage');
+const cards = require('../../features/cards');
 
 register('profile', {
   es: {
@@ -25,6 +26,8 @@ register('profile', {
     streakValue: '{n} días',
     role: 'Rol personalizado',
     level: 'Nivel',
+    marriedTo: 'En matrimonio con',
+    net: 'Monedas',
     style: 'Estilo',
     favorites: 'Anime y manga favoritos',
     noFavorites: 'Marca favoritos con el botón {e:heart} en cualquier ficha de `/anime`.',
@@ -46,6 +49,8 @@ register('profile', {
     streakValue: '{n} days',
     role: 'Custom role',
     level: 'Level',
+    marriedTo: 'Married to',
+    net: 'Coins',
     style: 'Style',
     favorites: 'Favourite anime & manga',
     noFavorites: 'Add favourites with the {e:heart} button on any `/anime` page.',
@@ -69,7 +74,7 @@ function topInteraction(locale, list) {
   return `${def[locale][1]} ×${first.n}`;
 }
 
-function profileCard(locale, { user, member, guild }) {
+function profileCard(locale, { user, member, guild, image = null }) {
   const profile = db.profile(user.id);
   const name = member?.displayName ?? user.globalName ?? user.username;
   const lines = [];
@@ -100,6 +105,16 @@ function profileCard(locale, { user, member, guild }) {
 
   const body = ['sep', `**${L(locale, 'favorites')}**\n${favText}`];
 
+  if (image) {
+    // The picture already shows coins, rank, streak, level and marriage: keep only the extras in text.
+    const extras = [];
+    const roleId = guild ? db.customRole(guild.id, user.id) : null;
+    const role = roleId ? guild.roles.cache.get(roleId) : null;
+    if (role) extras.push(ui.bullet('palette', L(locale, 'role'), `${role.toString()} \`${role.hexColor.toUpperCase()}\``));
+    if (married) extras.push(married);
+    body.unshift(ui.gallery({ url: image.url, description: name }), extras.length ? extras.join('\n') : null);
+  }
+
   if (guild) {
     const stats = db.interactionStats(guild.id, user.id);
     const given = topInteraction(locale, stats.given);
@@ -115,10 +130,53 @@ function profileCard(locale, { user, member, guild }) {
     emoji: 'sakura',
     title: name,
     subtitle: `@${user.username}`,
-    intro: [ui.quote(profile.bio ? cleanUserText(profile.bio, 160) : L(locale, 'noBio')), lines.join('\n')].filter(Boolean).join('\n\n'),
-    thumbnail: user.displayAvatarURL({ size: 256, extension: 'png' }),
+    intro: [ui.quote(profile.bio ? cleanUserText(profile.bio, 160) : L(locale, 'noBio')), image ? null : lines.join('\n')].filter(Boolean).join('\n\n'),
+    thumbnail: image ? undefined : user.displayAvatarURL({ size: 256, extension: 'png' }),
     body,
   });
+}
+
+/** The profile banner picture, or null without canvas / outside a server. */
+async function profileImage(locale, { user, member, guild }) {
+  if (!guild) return null;
+  const row = db.member(guild.id, user.id);
+  const level = levels.levelInfo(db.level(guild.id, user.id).xp);
+  const profile = db.profile(user.id);
+  const stats = [
+    { label: L(locale, 'net'), value: formatNumber(locale, row.coins + row.bank), color: '#FBBF24' },
+    { label: L(locale, 'rank'), value: row.coins + row.bank > 0 ? `#${db.rank(guild.id, user.id)}` : '—', color: '#7DD3FC' },
+    { label: L(locale, 'streak'), value: L(locale, 'streakValue', { n: row.daily_streak || 0 }), color: '#F472B6' },
+  ];
+  const style = profile.style && fashionData.STYLES[profile.style];
+  stats.push(style
+    ? { label: L(locale, 'style'), value: pick(locale, style.name), color: '#A78BFA' }
+    : { label: L(locale, 'favorites'), value: String(db.favorites(user.id).length), color: '#A78BFA' });
+
+  let partner = null;
+  const couple = db.partner(user.id);
+  if (couple) {
+    const partnerMember = await guild.members.fetch(couple.partner_id).catch(() => null);
+    const partnerUser = partnerMember?.user ?? await user.client?.users?.fetch?.(couple.partner_id).catch(() => null);
+    partner = {
+      name: partnerMember?.displayName ?? partnerUser?.globalName ?? partnerUser?.username ?? '…',
+      avatar: (partnerMember ?? partnerUser)?.displayAvatarURL?.({ size: 128, extension: 'png', forceStatic: true }) ?? null,
+      label: L(locale, 'marriedTo'),
+    };
+  }
+  const buffer = await cards.renderProfile({
+    name: member?.displayName ?? user.globalName ?? user.username,
+    username: user.username,
+    avatar: (member ?? user).displayAvatarURL?.({ size: 256, extension: 'png', forceStatic: true }) ?? null,
+    stats,
+    level: { level: level.level, current: level.current, needed: level.needed },
+    levelLabel: L(locale, 'level'),
+    partner,
+    accent: member?.displayHexColor,
+  }).catch(err => {
+    console.error('[Cards] profile:', err.message);
+    return null;
+  });
+  return buffer ? ui.bufferAttachment(buffer, 'profile.png') : null;
 }
 
 router.register('profile', async (interaction, route, { locale }) => {
@@ -157,9 +215,12 @@ module.exports = {
 
   async run(ctx) {
     const user = ctx.opt.user('user') ?? ctx.user;
+    await ctx.defer();
     const member = ctx.guild ? await ctx.guild.members.fetch(user.id).catch(() => null) : null;
-    return ctx.reply(ui.message(profileCard(ctx.locale, { user, member, guild: ctx.guild })));
+    const image = await profileImage(ctx.locale, { user, member, guild: ctx.guild });
+    return ctx.reply(ui.message(profileCard(ctx.locale, { user, member, guild: ctx.guild, image }), { files: image ? [image.attachment] : [] }));
   },
 
   profileCard,
+  profileImage,
 };

@@ -29,8 +29,15 @@ module.exports = {
     const a = ctx.opt.user('user');
     if (!a) return ctx.reply(ui.message(ui.notice('info', ctx.t('common.usageTitle'), '`/ship usuario: otra:` · `-ship @alguien @otra`'), { ephemeral: true }));
     const b = ctx.opt.user('other') ?? ctx.user;
-    const nameOf = async user => (await ctx.guild?.members.fetch(user.id).catch(() => null))?.displayName ?? user.globalName ?? user.username;
     await ctx.defer();
-    return ctx.reply(await fun.shipMessage(ctx.locale, { id: b.id, name: await nameOf(b) }, { id: a.id, name: await nameOf(a) }));
+    const person = async user => {
+      const member = await ctx.guild?.members.fetch(user.id).catch(() => null);
+      return {
+        id: user.id,
+        name: member?.displayName ?? user.globalName ?? user.username,
+        avatar: (member ?? user).displayAvatarURL?.({ size: 256, extension: 'png', forceStatic: true }) ?? null,
+      };
+    };
+    return ctx.reply(await fun.shipMessage(ctx.locale, await person(b), await person(a)));
   },
 };

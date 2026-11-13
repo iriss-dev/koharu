@@ -299,6 +299,52 @@ describe('fun', () => {
   });
 });
 
+describe('picture cards', () => {
+  const canvas = require('../src/utils/canvas');
+  const isPng = buffer => buffer && buffer.subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A]));
+
+  test('ship, level and profile come with a drawn picture', { skip: !canvas.available }, async () => {
+    const w = world();
+    const ship = await run(w, { commandName: 'ship', options: { user: w.yuki } });
+    assert.equal(ship.reply.files.length, 1);
+    assert.equal(ship.reply.files[0].name, 'ship.png');
+    assert.ok(isPng(ship.reply.files[0].attachment));
+    assert.match(textOf(ship.reply), /💗|🤍/, 'the hearts row stays above the picture');
+
+    db.setXp(w.guild.id, IRIS, 420);
+    const rank = await run(w, { commandName: 'level', sub: 'rank' });
+    assert.equal(rank.reply.files[0].name, 'level.png');
+    assert.match(textOf(rank.reply), /Nivel \*\*2\*\*/);
+
+    db.marry(IRIS, YUKI);
+    const profile = await run(w, { commandName: 'profile' });
+    assert.equal(profile.reply.files[0].name, 'profile.png');
+    assert.ok(isPng(profile.reply.files[0].attachment));
+    db.divorce(IRIS);
+  });
+
+  test('level-ups are announced with a celebration picture', { skip: !canvas.available }, async () => {
+    const w = world();
+    db.setXp(w.guild.id, YUKI, 99);
+    const message = prefixMessage(w, 'hola');
+    message.author = w.yuki;
+    message.member = w.yukiMember;
+    await levels.onMessage(message, 'es', { at: Math.floor(Date.now() / 1000) + 600 });
+    const card = w.channel.sent.at(-1);
+    assert.equal(card.files[0].name, 'levelup.png');
+    assertValid(card, 'level up picture');
+  });
+
+  test('renderers draw placeholders when avatars and backgrounds cannot be fetched', { skip: !canvas.available }, async () => {
+    const cards = require('../src/features/cards');
+    const buffer = await cards.renderRank({
+      name: 'Nadie', username: 'nadie', avatar: null, level: 0, current: 0, needed: 100, rank: null, messages: 0,
+      labels: { level: 'LEVEL', rank: 'RANK', messages: 'Messages', levelUp: 'LEVEL UP!' }, celebrate: true,
+    });
+    assert.ok(isPng(buffer));
+  });
+});
+
 describe('welcome', () => {
   test('settings preview and the member-join event', async () => {
     const w = world();

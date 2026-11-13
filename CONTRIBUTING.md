@@ -19,6 +19,7 @@ npm test
 | --- | --- |
 | `src/commands/<category>/` | One file per slash command. Each exports `data`, `category`, `emoji`, `run(ctx)` and, optionally, `prefix` and `autocomplete`. |
 | `src/features/` | The logic and cards behind each area (anime, fashion, deals, economy…), plus their button and menu handlers. |
+| `src/features/cards/` + `src/utils/canvas.js` | The drawn picture cards (ship, level, profile). Keep them optional: return `null` when `canvas.available` is false. |
 | `src/core/` | Shared plumbing: the card kit (`ui.js`), strings (`i18n.js`), component routing (`router.js`), the command context, emojis and the HTTP client. |
 | `src/services/` | Thin clients for AniList, CheapShark and GamerPower, plus `kawaii.js`: pooled anime GIFs and pictures from nekos.best and waifu.pics, picked by mood (`kawaii.mood('warn')`). |
 | `scripts/emojis/` | The emoji set as SVG and the script that renders it to `assets/emojis/*.png`. |

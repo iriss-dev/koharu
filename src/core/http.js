@@ -96,6 +96,20 @@ async function getJson(url, { method = 'GET', body, headers = {}, timeout = 8000
   }
 }
 
+/**
+ * Downloads a file (avatars, anime backgrounds) as a Buffer.
+ * @param {string} url
+ * @param {{ timeout?: number, maxBytes?: number }} [options]
+ */
+async function getBuffer(url, { timeout = 6000, maxBytes = 8 * 1024 * 1024 } = {}) {
+  const res = await fetchImpl(url, { headers: { 'User-Agent': USER_AGENT }, signal: AbortSignal.timeout(timeout) });
+  if (!res.ok) throw new HttpError(res.status, url, null);
+  if (typeof res.arrayBuffer !== 'function') throw new HttpError(0, url, 'not binary');
+  const buffer = Buffer.from(await res.arrayBuffer());
+  if (buffer.length > maxBytes) throw new HttpError(413, url, 'too large');
+  return buffer;
+}
+
 /** Testing hook: replace fetch. Returns a function that restores the original. */
 function _setFetch(fn) {
   const previous = fetchImpl;
@@ -111,4 +125,4 @@ function clearCache() {
   cache.clear();
 }
 
-module.exports = { getJson, HttpError, USER_AGENT, clearCache, _setFetch };
+module.exports = { getJson, getBuffer, HttpError, USER_AGENT, clearCache, _setFetch };

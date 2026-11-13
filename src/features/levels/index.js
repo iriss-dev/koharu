@@ -15,6 +15,7 @@ const emojis = require('../../core/emojis');
 const { register, t } = require('../../core/i18n');
 const db = require('../../database/db');
 const kawaii = require('../../services/kawaii');
+const cards = require('../cards');
 const { formatNumber, escapeMarkdown } = require('../../utils/text');
 
 register('levels', {
@@ -34,6 +35,9 @@ register('levels', {
     yourRank: 'Tú: #{rank} · nivel {level}',
     disabled: 'Los niveles están desactivados en este servidor. Un admin puede activarlos con `/config niveles`.',
     howTo: 'Ganas XP conversando (una vez por minuto). Cada nivel trae monedas de premio.',
+    card: { level: 'NIVEL', rank: 'PUESTO', messages: 'Mensajes', levelUp: '¡SUBISTE DE NIVEL!' },
+    summary: '{e:star} Nivel **{level}** · {e:trophy} {rank} · {e:sparkle} {percent}% al siguiente',
+    noRank: 'sin puesto aún',
   },
   en: {
     title: '{name}\'s level',
@@ -51,6 +55,9 @@ register('levels', {
     yourRank: 'You: #{rank} · level {level}',
     disabled: 'Levels are turned off in this server. An admin can turn them on with `/settings levels`.',
     howTo: 'You earn XP by chatting (once a minute). Every level comes with a coin reward.',
+    card: { level: 'LEVEL', rank: 'RANK', messages: 'Messages', levelUp: 'LEVEL UP!' },
+    summary: '{e:star} Level **{level}** · {e:trophy} {rank} · {e:sparkle} {percent}% to the next one',
+    noRank: 'no rank yet',
   },
 });
 
@@ -105,7 +112,7 @@ async function onMessage(message, locale, { random = Math.random, at } = {}) {
 
   const reward = after * REWARD_PER_LEVEL;
   db.addCoins(message.guild.id, message.author.id, reward);
-  const payload = await levelUpMessage(locale, { user: message.author, member: message.member, level: after, reward });
+  const payload = await levelUpMessage(locale, { user: message.author, member: message.member, level: after, reward, guild: message.guild });
 
   const target = settings.levelup_channel_id
     ? message.guild.channels.cache.get(settings.levelup_channel_id) ?? await message.guild.channels.fetch(settings.levelup_channel_id).catch(() => null)
@@ -114,8 +121,35 @@ async function onMessage(message, locale, { random = Math.random, at } = {}) {
   return { levelUp: true, level: after };
 }
 
-async function levelUpMessage(locale, { user, member, level, reward }) {
-  const gif = await kawaii.mood('levelup').catch(() => null);
+/** Picture card for /nivel and level-ups, or null when canvas is not installed. */
+async function picture(locale, { guild, user, member, row, celebrate = false }) {
+  const info = levelInfo(row.xp);
+  const buffer = await cards.renderRank({
+    name: member?.displayName ?? user.globalName ?? user.username,
+    username: user.username,
+    avatar: (member ?? user).displayAvatarURL?.({ size: 256, extension: 'png', forceStatic: true }) ?? null,
+    level: info.level,
+    current: info.current,
+    needed: info.needed,
+    rank: row.xp > 0 ? db.levelRank(guild.id, user.id) : null,
+    messages: row.messages,
+    accent: member?.displayHexColor,
+    labels: L(locale, 'card'),
+    celebrate,
+    format: value => formatNumber(locale, value),
+  }).catch(err => {
+    console.error('[Cards] rank:', err.message);
+    return null;
+  });
+  return buffer ? ui.bufferAttachment(buffer, celebrate ? 'levelup.png' : 'level.png') : null;
+}
+
+async function levelUpMessage(locale, { user, member, level, reward, guild }) {
+  const row = guild ? db.level(guild.id, user.id) : null;
+  const [gif, image] = await Promise.all([
+    kawaii.mood('levelup').catch(() => null),
+    guild && row ? picture(locale, { guild, user, member, row, celebrate: true }) : null,
+  ]);
   const name = escapeMarkdown(member?.displayName ?? user.globalName ?? user.username);
   const card = ui.card({
     accent: 'gold',
@@ -123,34 +157,54 @@ async function levelUpMessage(locale, { user, member, level, reward }) {
     title: L(locale, 'levelUpTitle'),
     intro: [ui.quote(L(locale, 'levelUp', { user: `<@${user.id}>`, level })), L(locale, 'reward', { amount: formatNumber(locale, reward) })].join('\n'),
     thumbnail: gif?.url ?? user.displayAvatarURL?.({ size: 256, extension: 'png' }),
+    body: image ? [ui.gallery({ url: image.url, description: L(locale, 'levelUpTitle') })] : [],
     footer: name,
   });
-  return { ...ui.message(card), allowedMentions: { users: [user.id] } };
+  return { ...ui.message(card, { files: image ? [image.attachment] : [] }), allowedMentions: { users: [user.id] } };
 }
 
-function rankMessage(locale, { guild, user, member }) {
+async function rankMessage(locale, { guild, user, member }) {
   const settings = db.guildSettings(guild.id);
   const row = db.level(guild.id, user.id);
   const info = levelInfo(row.xp);
   const name = escapeMarkdown(member?.displayName ?? user.globalName ?? user.username);
+  const rank = row.xp > 0 ? db.levelRank(guild.id, user.id) : null;
+  const percent = Math.floor((info.current / info.needed) * 100);
+  const [image, gif] = await Promise.all([
+    picture(locale, { guild, user, member, row }),
+    kawaii.mood(percent >= 50 ? 'levelup' : 'work').catch(() => null),
+  ]);
+  const footer = settings.levels_enabled
+    ? `${L(locale, 'next', { xp: formatNumber(locale, info.needed - info.current), level: info.level + 1 })} · ${L(locale, 'howTo')}`
+    : L(locale, 'disabled');
+
+  if (image) {
+    return ui.message(ui.card({
+      accent: member?.displayColor || 'lavender',
+      emoji: 'trophy',
+      title: L(locale, 'title', { name }),
+      intro: L(locale, 'summary', { level: info.level, rank: rank ? L(locale, 'rankValue', { rank }) : L(locale, 'noRank'), percent }),
+      thumbnail: gif?.url,
+      body: [ui.gallery({ url: image.url, description: L(locale, 'title', { name }) }), ui.sub(footer)],
+    }), { files: [image.attachment] });
+  }
+
+  // Text version when the canvas package is missing.
   const lines = [
     ui.bullet('star', L(locale, 'level'), `**${info.level}**`),
     ui.bullet('sparkle', L(locale, 'xp'), `${formatNumber(locale, info.current)} / ${formatNumber(locale, info.needed)} · ${formatNumber(locale, info.total)} total`),
-    `\`${progressBar(info.current, info.needed)}\` ${Math.floor((info.current / info.needed) * 100)}%`,
+    `\`${progressBar(info.current, info.needed)}\` ${percent}%`,
   ];
-  if (row.xp > 0) lines.push(ui.bullet('trophy', L(locale, 'rank'), L(locale, 'rankValue', { rank: db.levelRank(guild.id, user.id) })));
+  if (rank) lines.push(ui.bullet('trophy', L(locale, 'rank'), L(locale, 'rankValue', { rank })));
   lines.push(ui.bullet('chat', L(locale, 'messages'), formatNumber(locale, row.messages)));
-
   return ui.message(ui.card({
     accent: member?.displayColor || 'lavender',
     emoji: 'trophy',
     title: L(locale, 'title', { name }),
     subtitle: `@${user.username}`,
     intro: lines.join('\n'),
-    thumbnail: user.displayAvatarURL({ size: 256, extension: 'png' }),
-    body: [ui.sub(settings.levels_enabled
-      ? `${L(locale, 'next', { xp: formatNumber(locale, info.needed - info.current), level: info.level + 1 })} · ${L(locale, 'howTo')}`
-      : L(locale, 'disabled'))],
+    thumbnail: gif?.url ?? user.displayAvatarURL({ size: 256, extension: 'png' }),
+    body: [ui.sub(footer)],
   }));
 }
 
