@@ -7,12 +7,14 @@ const registry = require('../core/registry');
 const emojis = require('../core/emojis');
 const scheduler = require('../core/scheduler');
 const deals = require('../features/deals');
+const kawaii = require('../services/kawaii');
 
 const STATUS = [
   { name: '/ayuda · /help', type: ActivityType.Listening },
   { name: 'anime 🌸', type: ActivityType.Watching },
   { name: 'outfits ✨', type: ActivityType.Watching },
   { name: 'ofertas · deals 🎁', type: ActivityType.Watching },
+  { name: '-abrazo · -kawaii · -ship 💞', type: ActivityType.Playing },
 ];
 
 async function deployCommands(client) {
@@ -35,6 +37,9 @@ module.exports = {
       await emojis.sync(client, { stateFile: path.join(config.dataDir, 'emoji-state.json') })
         .catch(err => console.warn('[Emojis] Sync skipped:', err.message));
     }
+
+    // Fill the cute GIF pools in the background so every card has a picture.
+    kawaii.warm().then(n => console.log(`[Koharu] ${n} anime GIF categories ready.`)).catch(() => null);
 
     let i = 0;
     const rotate = () => {

@@ -11,6 +11,8 @@ const db = require('../../database/db');
 const { cleanUserText, formatNumber } = require('../../utils/text');
 const fashionData = require('../../features/fashion/data');
 const social = require('../../features/social');
+const levels = require('../../features/levels');
+const marriage = require('../../features/marriage');
 
 register('profile', {
   es: {
@@ -22,6 +24,7 @@ register('profile', {
     streak: 'Racha diaria',
     streakValue: '{n} días',
     role: 'Rol personalizado',
+    level: 'Nivel',
     style: 'Estilo',
     favorites: 'Anime y manga favoritos',
     noFavorites: 'Marca favoritos con el botón {e:heart} en cualquier ficha de `/anime`.',
@@ -42,6 +45,7 @@ register('profile', {
     streak: 'Daily streak',
     streakValue: '{n} days',
     role: 'Custom role',
+    level: 'Level',
     style: 'Style',
     favorites: 'Favourite anime & manga',
     noFavorites: 'Add favourites with the {e:heart} button on any `/anime` page.',
@@ -75,10 +79,15 @@ function profileCard(locale, { user, member, guild }) {
     lines.push(ui.bullet('coin', L(locale, 'wallet'), `**${formatNumber(locale, row.coins)}**`) + `  ${ui.bullet('piggy', L(locale, 'bank'), `**${formatNumber(locale, row.bank)}**`)}`);
     if (row.coins + row.bank > 0) lines.push(ui.bullet('crown', L(locale, 'rank'), L(locale, 'rankValue', { rank: db.rank(guild.id, user.id) })));
     if (row.daily_streak) lines.push(ui.bullet('fire', L(locale, 'streak'), L(locale, 'streakValue', { n: row.daily_streak })));
+    const xp = db.level(guild.id, user.id).xp;
+    const info = levels.levelInfo(xp);
+    lines.push(ui.bullet('trophy', L(locale, 'level'), `**${info.level}** \`${levels.progressBar(info.current, info.needed, 8)}\``));
     const roleId = db.customRole(guild.id, user.id);
     const role = roleId ? guild.roles.cache.get(roleId) : null;
     if (role) lines.push(ui.bullet('palette', L(locale, 'role'), `${role.toString()} \`${role.hexColor.toUpperCase()}\``));
   }
+  const married = marriage.statusLine(locale, user.id);
+  if (married) lines.push(married);
   if (profile.style && fashionData.STYLES[profile.style]) {
     const style = fashionData.STYLES[profile.style];
     lines.push(ui.bullet(style.emoji, L(locale, 'style'), pick(locale, style.name)));

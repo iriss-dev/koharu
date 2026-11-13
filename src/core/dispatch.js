@@ -17,6 +17,9 @@ const { fromInteraction, fromMessage, localeFor } = require('./context');
 const { HttpError } = require('./http');
 require('./strings');
 
+// Lazy: features load the registry, which loads this file.
+const levels = () => require('../features/levels');
+
 function isNetworkError(err) {
   return err instanceof HttpError || ['AbortError', 'TimeoutError'].includes(err?.name) || /fetch failed|ECONNRESET|ETIMEDOUT|ENOTFOUND/i.test(String(err?.message ?? err?.cause?.message ?? ''));
 }
@@ -123,7 +126,11 @@ async function handleMessage(message) {
   if (message.author.bot || !message.guild) return null;
   const { locale, prefix } = contextFor(message);
   const split = splitCommand(message.content, prefix, message.client.user.id);
-  if (!split) return null;
+  if (!split) {
+    // Ordinary chat earns level XP (never for commands, so spamming them does not pay).
+    await levels().onMessage(message, locale).catch(err => console.error('[Levels]', err));
+    return null;
+  }
 
   const { commands, aliases } = registry.get();
   // A bare mention opens the help menu; a bare prefix does nothing.

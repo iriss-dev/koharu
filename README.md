@@ -5,7 +5,7 @@
 # Koharu (心春)
 
 **A cute, bilingual Discord companion for anime and fashion communities.**
-Anime & manga lookups · fashion help · game deals · anime interactions · economy · custom gradient roles · moderation
+Anime & manga lookups · anime interactions · marriages · levels · fun · fashion help · game deals · economy · custom gradient roles · moderation
 
 [![CI](https://github.com/iriss-dev/koharu/actions/workflows/ci.yml/badge.svg)](https://github.com/iriss-dev/koharu/actions/workflows/ci.yml)
 [![Node.js](https://img.shields.io/badge/node-%E2%89%A520-F472B6?style=flat-square&logo=node.js&logoColor=white)](https://nodejs.org)
@@ -66,8 +66,19 @@ The outfit generator draws from 110 tagged pieces and never returns an incomplet
 | `/ofertas alerta` | A private message when a game drops to your price |
 | `/ofertas canal` | Koharu posts every new free game in a channel automatically |
 
-### 💞 Interactions
-`/interactuar` (or `-abrazo @alguien`, `-pat`, `-besito`…) with 19 actions and `/reaccionar` with 20 reactions, each with an anime GIF. Koharu counts every pair ("Hugs from Iris to Yuki: **5**"), and the person on the receiving end gets a **Return it** button.
+### 💞 Interactions & couples
+`/interactuar` (or `-abrazo @alguien`, `-pat`, `-bonk`, `-kabedon`…) with 26 actions and `/reaccionar` with 34 reactions (`-nya`, `-tecito`, `-jiji`, `-voltearmesa`…), each with an anime GIF. Both commands suggest actions as you type. Koharu counts every pair ("Hugs from Iris to Yuki: **5**"), and the person on the receiving end gets a **Return it** button.
+
+`/casarse @alguien` sends an anime-style proposal that only that person can accept or decline; the ring shows on both profiles. `/divorcio` asks for confirmation first.
+
+### 🌟 Levels
+Members earn 15–25 XP for chatting (once a minute, so spam does not pay; commands earn nothing). Every level-up is announced with a cute GIF and pays `level × 100` coins. `/nivel ver` shows a progress bar and rank, `/nivel top` the server ranking, `/nivel fijar` lets admins adjust it. `/config niveles` turns levels off or sends the announcements to one channel. Works without privileged intents.
+
+### 🎀 Fun
+`/kawaii` (neko, waifu, kitsune, husbando, with an **Another** button and artist credit) · `/ship` (stable love meter and ship name) · `/bola8` · `/puntuar` · `/elegir` · `/dado` (`-dado 2d20`) · `/avatar`
+
+### 🖼️ Cute anime pictures everywhere
+Decorative images are small anime GIFs chosen by mood, a different one each time: a pout or a *bonk* on warnings, a *yeet* on bans, a sleepy GIF when work is on cooldown, a happy dance when you win at the casino. They come from nekos.best (waifu.pics as backup), are fetched 20 at a time and kept in memory, and never repeat back to back. If both services are down, Koharu falls back to its local pictures, so cards never break.
 
 ### 🪙 Economy & casino (per server)
 `/trabajar` (17 cosy jobs) · `/diario` with streaks and a weekly bonus · `/saldo` with quick buttons · `/depositar` · `/retirar` · `/pagar` · `/ranking` · `/perfil` with bio, style and favourites · `/llaves` (event keys) · `/blackjack` (dealer peek, 3:2, double, idle timeout) · `/moneda` · `/tragamonedas`
@@ -78,10 +89,12 @@ Amounts accept `500`, `2.5k`, `mitad` / `half` and `todo` / `all`. Bets are take
 `/panelroles publicar` posts a panel. Members press **Set up role**, choose a name, a colour (code or name) and how to pay, and see a **preview image** before confirming. Server boosters can use two colours: a **real gradient role** where Discord's enhanced role colours are available, or a blend of both otherwise. If Discord rejects the change, the payment is refunded.
 
 ### 🛡️ Moderation
-`/banear` · `/expulsar` · `/aislar` · `/desaislar` · `/advertir` · `/limpiar` · `/modolento` with hierarchy checks, a private notice to the member and a copy of every case in the log channel set with `/config registro`.
+`/banear` · `/expulsar` · `/aislar` · `/desaislar` · `/advertir` (añadir, ver, **quitar** una por número, borrar) · `/limpiar` · `/modolento` with hierarchy checks, a private notice to the member and a copy of every case in the log channel set with `/config registro`. Each case card carries a small anime GIF that fits the action.
 
 ### ⚙️ Settings
-`/config ver | idioma | prefijo | registro` sets the language (automatic, Spanish or English), the text prefix and the moderation log.
+`/config ver | idioma | prefijo | registro | niveles | bienvenida` sets the language (automatic, Spanish or English), the text prefix, the moderation log, levels and welcome messages.
+
+**Welcome messages** (`/config bienvenida canal: mensaje:`) greet new members with their avatar and a hello GIF. The message may use `{user}`, `{server}` and `{count}`. They need the **Server Members Intent** in the Developer Portal and `ENABLE_PRIVILEGED_INTENTS=true`.
 
 ## Koharu's own emojis
 
@@ -92,7 +105,7 @@ Amounts accept `500`, `2.5k`, `mitad` / `half` and `todo` / `all`. Bets are take
 ## Quick start
 
 1. **Create the application** at the [Discord Developer Portal](https://discord.com/developers/applications) and copy its token and application ID.
-2. **Optional:** enable **Message Content Intent** if you want prefix commands like `-abrazo @alguien`.
+2. **Optional:** enable **Message Content Intent** if you want prefix commands like `-abrazo @alguien`, and **Server Members Intent** for welcome messages (then set `ENABLE_PRIVILEGED_INTENTS=true`).
 3. **Invite the bot** (replace `YOUR_ID`):
    ```
    https://discord.com/oauth2/authorize?client_id=YOUR_ID&scope=bot+applications.commands&permissions=1099780451350
@@ -120,14 +133,15 @@ Nothing to do by hand. The database upgrades itself on start, and each person's 
 | [AniList](https://anilist.co) | Anime, manga, characters, schedules | Public GraphQL API; synopses are in English as published by AniList |
 | [CheapShark](https://www.cheapshark.com) | PC game prices | Prices in USD; links go through CheapShark's redirect as their terms ask |
 | [GamerPower](https://www.gamerpower.com) | Free games and loot | |
-| [nekos.best](https://nekos.best) | Reaction GIFs | SFW only; interactions still work without a GIF |
+| [nekos.best](https://nekos.best) | Reaction GIFs, neko / waifu / kitsune / husbando pictures | SFW only; interactions still work without a GIF |
+| [waifu.pics](https://waifu.pics) | Backup GIFs and a few extra categories (glomp, awoo, cringe) | SFW endpoints only |
 
-All four are free and need no API key. Koharu caches responses and backs off on rate limits.
+All five are free and need no API key. Koharu caches responses and backs off on rate limits.
 
 ## Development
 
 ```bash
-npm test             # 90 tests: every command end to end, Discord payload limits, translations, economy, casino odds
+npm test             # 105 tests: every command end to end, Discord payload limits, translations, economy, casino odds
 npm run preview      # screenshots of real replies → docs/preview/
 npm run emojis:render -- --sheet sheet.png   # re-render the emoji set (needs Playwright)
 ```

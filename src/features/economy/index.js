@@ -13,6 +13,7 @@ const db = require('../../database/db');
 const config = require('../../config');
 const args = require('../../core/args');
 const { formatNumber, ts, pickOne, escapeMarkdown } = require('../../utils/text');
+const kawaii = require('../../services/kawaii');
 
 register('economy', {
   es: {
@@ -149,7 +150,6 @@ const n = (locale, value) => formatNumber(locale, value);
 function balanceMessage(locale, { guild, user, member }) {
   const row = db.member(guild.id, user.id);
   const name = member?.displayName ?? user.username;
-  const money = ui.asset('pink_money.jpg');
   const lines = [
     ui.bullet('coin', L(locale, 'wallet'), `**${n(locale, row.coins)}**`),
     ui.bullet('piggy', L(locale, 'bank'), `**${n(locale, row.bank)}**`),
@@ -164,9 +164,10 @@ function balanceMessage(locale, { guild, user, member }) {
     emoji: 'coin',
     title: L(locale, 'balanceTitle', { name: escapeMarkdown(name) }),
     intro: lines.join('\n'),
-    thumbnail: user.displayAvatarURL({ size: 256, extension: 'png' }),
+    // A small happy anime GIF on the right (the avatar if the GIF service is cold).
+    thumbnail: kawaii.moodNow('money')?.url ?? user.displayAvatarURL({ size: 256, extension: 'png' }),
+    subtitle: `@${user.username}`,
     body: [
-      ui.gallery({ url: money.url, description: L(locale, 'wallet') }),
       ui.row(
         ui.button({ id: router.encode('eco', 'depall', user.id), label: L(locale, 'depositAll'), emoji: 'piggy', style: 'primary', disabled: row.coins <= 0 }),
         ui.button({ id: router.encode('eco', 'work', user.id), label: L(locale, 'work'), emoji: 'coffee' }),
@@ -174,7 +175,7 @@ function balanceMessage(locale, { guild, user, member }) {
       ),
     ],
   });
-  return ui.message(card, { files: [money.attachment] });
+  return ui.message(card);
 }
 
 /** @returns {{ payload: object, ok: boolean }} */
@@ -182,14 +183,16 @@ function work(locale, { guildId, userId, name }, now = Math.floor(Date.now() / 1
   const row = db.member(guildId, userId);
   const readyAt = (row.last_work || 0) + config.economy.workCooldown;
   if (now < readyAt) {
-    const cat = ui.asset('cat_yawn.png');
+    const gif = kawaii.moodNow('sleepy');
+    const cat = gif ? null : ui.asset('cat_yawn.png');
     const card = ui.card({
       accent: 'lavender',
       emoji: 'moon',
       title: L(locale, 'restTitle'),
-      body: [ui.quote(L(locale, 'restBody', { name: escapeMarkdown(name), when: ts(readyAt, 'R') })), ui.gallery({ url: cat.url, description: L(locale, 'restTitle') })],
+      intro: ui.quote(L(locale, 'restBody', { name: escapeMarkdown(name), when: ts(readyAt, 'R') })),
+      thumbnail: gif?.url ?? cat.url,
     });
-    return { ok: false, payload: ui.message(card, { files: [cat.attachment], ephemeral: true }) };
+    return { ok: false, payload: ui.message(card, { files: cat ? [cat.attachment] : [], ephemeral: true }) };
   }
   const { workMin, workMax } = config.economy;
   const earned = workMin + Math.floor(random() * (workMax - workMin + 1));
@@ -200,7 +203,9 @@ function work(locale, { guildId, userId, name }, now = Math.floor(Date.now() / 1
     accent: 'mint',
     emoji: 'coffee',
     title: L(locale, 'workTitle'),
-    body: [ui.quote(`*${job}*\n${L(locale, 'workEarned', { amount: n(locale, earned) })}`), ui.sub(`${L(locale, 'wallet')}: ${n(locale, updated.coins)} · ${L(locale, 'workNext', { when: ts(now + config.economy.workCooldown, 'R') })}`)],
+    intro: ui.quote(`*${job}*\n${L(locale, 'workEarned', { amount: n(locale, earned) })}`),
+    thumbnail: kawaii.moodNow('work')?.url,
+    body: [ui.sub(`${L(locale, 'wallet')}: ${n(locale, updated.coins)} · ${L(locale, 'workNext', { when: ts(now + config.economy.workCooldown, 'R') })}`)],
   });
   return { ok: true, payload: ui.message(card) };
 }
@@ -210,10 +215,11 @@ function daily(locale, { guildId, userId }) {
   if (!result.ok) {
     return { ok: false, payload: ui.message(ui.notice('info', L(locale, 'dailyTitle'), L(locale, 'dailyWait', { when: ts(result.nextAt, 'R') })), { ephemeral: true }) };
   }
-  const body = [ui.quote(L(locale, 'dailyBody', { amount: n(locale, result.reward), streak: result.streak, days: result.streak === 1 ? L(locale, 'day') : L(locale, 'days') }))];
+  const intro = ui.quote(L(locale, 'dailyBody', { amount: n(locale, result.reward), streak: result.streak, days: result.streak === 1 ? L(locale, 'day') : L(locale, 'days') }));
+  const body = [];
   if (result.weekly) body.push(L(locale, 'dailyWeekly'));
   body.push(ui.sub(L(locale, 'dailyNext', { when: ts(result.nextAt, 'R') })));
-  return { ok: true, payload: ui.message(ui.card({ accent: 'gold', emoji: 'gift', title: L(locale, 'dailyTitle'), body })) };
+  return { ok: true, payload: ui.message(ui.card({ accent: 'gold', emoji: 'gift', title: L(locale, 'dailyTitle'), intro, thumbnail: kawaii.moodNow('daily')?.url, body })) };
 }
 
 /** Moves coins between wallet and bank. kind = 'deposit' | 'withdraw'. */

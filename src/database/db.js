@@ -136,6 +136,30 @@ const MIGRATIONS = [
       );
     `);
   },
+  // 3: levels, marriages, welcome messages
+  db => {
+    addColumn(db, 'guild_settings', 'levels_enabled', 'INTEGER NOT NULL DEFAULT 1');
+    addColumn(db, 'guild_settings', 'levelup_channel_id', 'TEXT DEFAULT NULL');
+    addColumn(db, 'guild_settings', 'welcome_channel_id', 'TEXT DEFAULT NULL');
+    addColumn(db, 'guild_settings', 'welcome_message', 'TEXT DEFAULT NULL');
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS levels (
+        guild_id TEXT NOT NULL,
+        user_id TEXT NOT NULL,
+        xp INTEGER NOT NULL DEFAULT 0 CHECK (xp >= 0),
+        messages INTEGER NOT NULL DEFAULT 0,
+        last_xp_at INTEGER NOT NULL DEFAULT 0,
+        PRIMARY KEY (guild_id, user_id)
+      );
+      CREATE INDEX IF NOT EXISTS idx_levels_xp ON levels(guild_id, xp DESC);
+
+      CREATE TABLE IF NOT EXISTS marriages (
+        user_id TEXT PRIMARY KEY,
+        partner_id TEXT NOT NULL,
+        since INTEGER NOT NULL DEFAULT (strftime('%s', 'now'))
+      );
+    `);
+  },
 ];
 
 function addColumn(db, table, column, definition) {
@@ -194,6 +218,7 @@ function open(file = config.dbPath) {
     addWarning: db.prepare('INSERT INTO warnings (user_id, guild_id, moderator_id, reason) VALUES (?, ?, ?, ?)'),
     warnings: db.prepare('SELECT * FROM warnings WHERE user_id = ? AND guild_id = ? ORDER BY id DESC'),
     clearWarnings: db.prepare('DELETE FROM warnings WHERE user_id = ? AND guild_id = ?'),
+    removeWarning: db.prepare('DELETE FROM warnings WHERE id = ? AND user_id = ? AND guild_id = ?'),
 
     profile: db.prepare('SELECT * FROM profiles WHERE user_id = ?'),
     upsertBio: db.prepare("INSERT INTO profiles (user_id, bio) VALUES (?, ?) ON CONFLICT(user_id) DO UPDATE SET bio = excluded.bio, updated_at = strftime('%s', 'now')"),
@@ -220,11 +245,25 @@ function open(file = config.dbPath) {
     posted: db.prepare('SELECT giveaway_id FROM posted_giveaways WHERE guild_id = ?'),
     markPosted: db.prepare('INSERT OR IGNORE INTO posted_giveaways (guild_id, giveaway_id) VALUES (?, ?)'),
     prunePosted: db.prepare('DELETE FROM posted_giveaways WHERE posted_at < ?'),
+
+    level: db.prepare('SELECT * FROM levels WHERE guild_id = ? AND user_id = ?'),
+    ensureLevel: db.prepare('INSERT OR IGNORE INTO levels (guild_id, user_id) VALUES (?, ?)'),
+    gainXp: db.prepare('UPDATE levels SET xp = xp + ?, messages = messages + 1, last_xp_at = ? WHERE guild_id = ? AND user_id = ?'),
+    countMessage: db.prepare('UPDATE levels SET messages = messages + 1 WHERE guild_id = ? AND user_id = ?'),
+    setXp: db.prepare('UPDATE levels SET xp = MAX(0, ?) WHERE guild_id = ? AND user_id = ?'),
+    levelTop: db.prepare('SELECT user_id, xp, messages FROM levels WHERE guild_id = ? AND xp > 0 ORDER BY xp DESC, user_id LIMIT ? OFFSET ?'),
+    levelCount: db.prepare('SELECT COUNT(*) AS n FROM levels WHERE guild_id = ? AND xp > 0'),
+    levelRank: db.prepare('SELECT COUNT(*) + 1 AS rank FROM levels WHERE guild_id = ? AND xp > ?'),
+
+    marriage: db.prepare('SELECT * FROM marriages WHERE user_id = ?'),
+    marry: db.prepare('INSERT INTO marriages (user_id, partner_id, since) VALUES (?, ?, ?)'),
+    divorce: db.prepare('DELETE FROM marriages WHERE user_id = ?'),
   };
 
   const SETTINGS_COLUMNS = new Set([
     'role_panel_channel_id', 'role_panel_message_id', 'role_cost_coins', 'role_cost_keys', 'booster_free',
     'booster_dual_color', 'anchor_role_id', 'mod_log_channel_id', 'language', 'prefix', 'free_games_channel_id',
+    'levels_enabled', 'levelup_channel_id', 'welcome_channel_id', 'welcome_message',
   ]);
 
   const service = {
@@ -387,6 +426,10 @@ function open(file = config.dbPath) {
         language: null,
         prefix: null,
         free_games_channel_id: null,
+        levels_enabled: 1,
+        levelup_channel_id: null,
+        welcome_channel_id: null,
+        welcome_message: null,
         ...(row ?? {}),
       };
     },
@@ -415,6 +458,13 @@ function open(file = config.dbPath) {
     },
     clearWarnings(userId, guildId) {
       return q.clearWarnings.run(userId, guildId).changes;
+    },
+    /** Removes the n-th warning (1 = oldest), as numbered by /warn list. @returns {boolean} */
+    removeWarning(userId, guildId, n) {
+      const list = q.warnings.all(userId, guildId);
+      const row = list[list.length - n];
+      if (!row || n < 1) return false;
+      return q.removeWarning.run(row.id, userId, guildId).changes === 1;
     },
 
     // ------------------------------------------------------------------ profiles & favourites
@@ -491,6 +541,68 @@ function open(file = config.dbPath) {
     },
     prunePostedGiveaways(olderThanDays = 120) {
       q.prunePosted.run(now() - olderThanDays * 86400);
+    },
+
+    // ------------------------------------------------------------------ levels
+
+    level(guildId, userId) {
+      q.ensureLevel.run(guildId, userId);
+      return q.level.get(guildId, userId);
+    },
+    /**
+     * Adds XP for a message unless the member earned some less than `cooldown` seconds ago.
+     * @returns {{ gained: number, before: number, after: number, messages: number }}
+     */
+    gainXp(guildId, userId, amount, at = now(), cooldown = 60) {
+      return db.transaction(() => {
+        const row = service.level(guildId, userId);
+        if (at - row.last_xp_at < cooldown) {
+          q.countMessage.run(guildId, userId);
+          return { gained: 0, before: row.xp, after: row.xp, messages: row.messages + 1 };
+        }
+        q.gainXp.run(amount, at, guildId, userId);
+        return { gained: amount, before: row.xp, after: row.xp + amount, messages: row.messages + 1 };
+      })();
+    },
+    setXp(guildId, userId, xp) {
+      service.level(guildId, userId);
+      q.setXp.run(Math.trunc(xp), guildId, userId);
+      return q.level.get(guildId, userId);
+    },
+    levelTop(guildId, limit = 10, offset = 0) {
+      return q.levelTop.all(guildId, limit, offset);
+    },
+    levelCount(guildId) {
+      return q.levelCount.get(guildId).n;
+    },
+    levelRank(guildId, userId) {
+      return q.levelRank.get(guildId, service.level(guildId, userId).xp).rank;
+    },
+
+    // ------------------------------------------------------------------ marriages (global, like profiles)
+
+    partner(userId) {
+      return q.marriage.get(userId) ?? null;
+    },
+    /** @returns {boolean} false when either person is already married. */
+    marry(userA, userB, at = now()) {
+      if (userA === userB) return false;
+      return db.transaction(() => {
+        if (q.marriage.get(userA) || q.marriage.get(userB)) return false;
+        q.marry.run(userA, userB, at);
+        q.marry.run(userB, userA, at);
+        return true;
+      })();
+    },
+    /** @returns {string|null} the former partner's ID. */
+    divorce(userId) {
+      return db.transaction(() => {
+        const row = q.marriage.get(userId);
+        if (!row) return null;
+        q.divorce.run(userId);
+        q.divorce.run(row.partner_id);
+        return row.partner_id;
+      })();
     },
 
     close() {

@@ -1,16 +1,15 @@
 'use strict';
 
 const { SlashCommandBuilder } = require('discord.js');
-const { loc, choice } = require('../../core/slash');
+const { loc } = require('../../core/slash');
 const ui = require('../../core/ui');
 const social = require('../../features/social');
 
 const capitalize = text => text.charAt(0).toUpperCase() + text.slice(1);
-const choices = Object.entries(social.REACTIONS).map(([key, def]) =>
-  choice(key, capitalize(def.en.replace('{a} ', '').replace('… zzz', '')), capitalize(def.es.replace('{a} ', '').replace('… zzz', ''))));
+const label = (def, locale) => capitalize(def[locale].replace('{a} ', '').replace('… zzz', ''));
 
 const data = loc(new SlashCommandBuilder(), ['react', 'reaccionar'], ['Show how you feel with an anime GIF', 'Muestra cómo te sientes con un GIF de anime'])
-  .addStringOption(opt => loc(opt, ['reaction', 'reacción'], ['How you feel', 'Cómo te sientes']).setRequired(true).addChoices(...choices));
+  .addStringOption(opt => loc(opt, ['reaction', 'reacción'], ['How you feel (start typing: blush, nya, sip…)', 'Cómo te sientes (escribe: sonrojo, nya, tecito…)']).setRequired(true).setAutocomplete(true));
 
 module.exports = {
   data,
@@ -26,6 +25,10 @@ module.exports = {
       const key = rawArgs[0]?.toLowerCase();
       return { options: { reaction: social.REACTIONS[key] ? key : null } };
     },
+  },
+
+  autocomplete(interaction, locale) {
+    return social.choices(social.REACTIONS, (key, def) => label(def, locale), interaction.options.getFocused());
   },
 
   async run(ctx) {

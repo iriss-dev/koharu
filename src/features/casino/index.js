@@ -11,6 +11,7 @@ const router = require('../../core/router');
 const emojis = require('../../core/emojis');
 const { register, t } = require('../../core/i18n');
 const db = require('../../database/db');
+const kawaii = require('../../services/kawaii');
 const config = require('../../config');
 const { createDeck, calculateHand, formatHand } = require('../../utils/cards');
 const { formatNumber, escapeMarkdown } = require('../../utils/text');
@@ -185,7 +186,12 @@ function double(game) {
 function blackjackMessage(locale, game) {
   const player = calculateHand(game.playerHand);
   const dealer = calculateHand(game.dealerHand);
-  const cards = ui.asset('pink_cards.png');
+  // Small anime GIF: thinking while playing, happy or sad at the end. Chosen once per state.
+  const state = game.inProgress ? 'cards' : { win: 'win', natural: 'win', push: 'push', lose: 'lose' }[game.outcome.kind];
+  if (game.mediaState !== state) {
+    game.media = kawaii.moodNow(state)?.url ?? null;
+    game.mediaState = state;
+  }
   const status = game.inProgress
     ? L(locale, 'choose')
     : `${game.timedOut ? `${L(locale, 'timeout')}\n` : ''}${L(locale, game.outcome.key, { ...game.outcome.vars, bet: n(locale, game.bet), win: n(locale, game.outcome.kind === 'natural' ? Math.floor(game.bet * 1.5) : game.bet) })}`;
@@ -196,7 +202,6 @@ function blackjackMessage(locale, game) {
     `**${L(locale, 'dealer')}** \`${game.inProgress ? '?' : dealer.total}\`\n${formatHand(game.dealerHand, game.inProgress)}`,
     `**${L(locale, 'you')}** \`${player.total}\`\n${formatHand(game.playerHand)}`,
     ui.quote(status),
-    ui.gallery({ url: cards.url, description: 'Blackjack' }),
   ];
   if (game.inProgress) {
     const canDouble = game.playerHand.length === 2 && db.member(game.guildId, game.userId).coins >= game.bet;
@@ -210,9 +215,10 @@ function blackjackMessage(locale, game) {
     accent,
     emoji: 'cards',
     title: L(locale, 'bjTitle', { bet: n(locale, game.bet) }),
+    thumbnail: game.media ?? undefined,
     body,
     footer: L(locale, 'footer', { name: escapeMarkdown(game.name) }),
-  }), { files: [cards.attachment] });
+  }));
 }
 
 /** Arms (or re-arms) the idle timer that stands for an absent player. */
@@ -256,7 +262,9 @@ function coinflip(locale, { guildId, userId, bet, side }, random = Math.random) 
     accent: won ? 'mint' : 'error',
     emoji: 'coin',
     title: L(locale, 'coinTitle'),
-    body: [ui.quote(L(locale, won ? 'coinWin' : 'coinLose', { side: L(locale, result), win: n(locale, bet), bet: n(locale, bet) })), ui.sub(L(locale, 'wallet', { wallet: n(locale, wallet) }))],
+    intro: ui.quote(L(locale, won ? 'coinWin' : 'coinLose', { side: L(locale, result), win: n(locale, bet), bet: n(locale, bet) })),
+    thumbnail: kawaii.moodNow(won ? 'win' : 'lose')?.url,
+    body: [ui.sub(L(locale, 'wallet', { wallet: n(locale, wallet) }))],
   }));
 }
 
@@ -299,6 +307,7 @@ function slotsFrame(locale, reels, { spinning = false, result = null, bet = 0, w
     accent: !result ? 'lavender' : result.multiplier ? 'mint' : 'error',
     emoji: 'slot',
     title: L(locale, 'slotsTitle'),
+    thumbnail: result ? kawaii.moodNow(result.multiplier ? 'win' : 'lose')?.url : undefined,
     body,
     footer: L(locale, 'slotsFooter'),
   }));

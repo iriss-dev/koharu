@@ -1,7 +1,7 @@
 {
   "name": "koharu",
-  "version": "2.0.0",
-  "description": "Cute, bilingual (es/en) Discord bot: anime & manga lookups, fashion help, game deals, anime interactions, per-server economy, custom gradient roles and moderation, built on Components V2 with its own emoji set.",
+  "version": "2.1.0",
+  "description": "Cute, bilingual (es/en) Discord bot: anime & manga lookups, 50+ anime interactions and reactions, marriages, levels, fun commands, fashion help, game deals, per-server economy, custom gradient roles and moderation with anime GIFs, built on Components V2 with its own emoji set.",
   "main": "src/index.js",
   "scripts": {
     "start": "node src/index.js",

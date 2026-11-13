@@ -25,7 +25,8 @@ const COMMANDS_DIR = path.resolve(__dirname, '../commands');
 const CATEGORIES = Object.freeze({
   general: { emoji: 'sakura', name: { es: 'General', en: 'General' } },
   anime: { emoji: 'tv', name: { es: 'Anime y manga', en: 'Anime & manga' } },
-  social: { emoji: 'hearts', name: { es: 'Interacciones', en: 'Interactions' } },
+  social: { emoji: 'hearts', name: { es: 'Interacciones y parejas', en: 'Interactions & couples' } },
+  fun: { emoji: 'star', name: { es: 'Diversión', en: 'Fun' } },
   fashion: { emoji: 'dress', name: { es: 'Moda', en: 'Fashion' } },
   deals: { emoji: 'tag', name: { es: 'Ofertas', en: 'Deals' } },
   economy: { emoji: 'coin', name: { es: 'Economía', en: 'Economy' } },

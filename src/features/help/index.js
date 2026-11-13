@@ -11,17 +11,21 @@ const router = require('../../core/router');
 const { register, t, pick } = require('../../core/i18n');
 const emojis = require('../../core/emojis');
 const { fold, truncate } = require('../../utils/text');
+const kawaii = require('../../services/kawaii');
 
 register('help', {
   es: {
     homeTitle: 'Hola, soy Koharu',
-    homeIntro: 'Tu compañera para el servidor: anime, moda, ofertas, economía, roles personalizados y moderación, todo con cariño {e:sakura}',
+    homeIntro: 'Tu compañera para el servidor: anime, interacciones, niveles, matrimonios, moda, ofertas, economía, roles personalizados y moderación, todo con cariño {e:sakura}',
     highlightsTitle: 'Para empezar',
     highlights: [
       '{e:tv} `/anime buscar` · fichas, temporadas y horario de emisión',
       '{e:dress} `/moda outfit` · un outfit completo para tu plan de hoy',
       '{e:gift} `/ofertas gratis` · juegos que están regalando ahora',
-      '{e:hearts} `/interactuar` · abrazos, caricias y más con GIFs',
+      '{e:hearts} `/interactuar` · abrazos, bonks, kabedon y +25 acciones con GIFs',
+      '{e:ribbon} `/casarse` · propuestas de matrimonio al estilo anime',
+      '{e:trophy} `/nivel` · gana experiencia conversando y sube de nivel',
+      '{e:star} `/kawaii` · `/ship` · `/bola8` · diversión tierna',
       '{e:search} `/buscar` · encuentra cualquier cosa desde un solo lugar',
     ],
     prefixNote: 'También puedes usar el prefijo `{prefix}` (por ejemplo `{prefix}abrazo @alguien` o `{prefix}anime frieren`).',
@@ -35,13 +39,16 @@ register('help', {
   },
   en: {
     homeTitle: 'Hi, I am Koharu',
-    homeIntro: 'Your server companion: anime, fashion, deals, economy, custom roles and moderation, all with love {e:sakura}',
+    homeIntro: 'Your server companion: anime, interactions, levels, marriages, fashion, deals, economy, custom roles and moderation, all with love {e:sakura}',
     highlightsTitle: 'Get started',
     highlights: [
       '{e:tv} `/anime search` · titles, seasons and airing schedule',
       '{e:dress} `/fashion outfit` · a complete outfit for today\'s plans',
       '{e:gift} `/deals free` · games being given away right now',
-      '{e:hearts} `/interact` · hugs, headpats and more with GIFs',
+      '{e:hearts} `/interact` · hugs, bonks, kabedon and 25+ actions with GIFs',
+      '{e:ribbon} `/marry` · anime-style marriage proposals',
+      '{e:trophy} `/level` · earn XP by chatting and level up',
+      '{e:star} `/kawaii` · `/ship` · `/8ball` · cute fun',
       '{e:search} `/search` · find anything from one place',
     ],
     prefixNote: 'You can also use the `{prefix}` prefix (for example `{prefix}hug @someone` or `{prefix}anime frieren`).',
@@ -90,7 +97,7 @@ function homeCard(locale, owner, prefix, avatarUrl = null) {
     emoji: 'sakura',
     title: L(locale, 'homeTitle'),
     intro: ui.quote(L(locale, 'homeIntro')),
-    thumbnail: avatarUrl ?? emojis.imageUrl('cat') ?? undefined,
+    thumbnail: kawaii.moodNow('hello')?.url ?? avatarUrl ?? emojis.imageUrl('cat') ?? undefined,
     body: [
       'sep',
       `**${L(locale, 'highlightsTitle')}**\n${L(locale, 'highlights').join('\n')}`,

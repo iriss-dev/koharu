@@ -1,7 +1,7 @@
 'use strict';
 
 const { SlashCommandBuilder } = require('discord.js');
-const { loc, choice } = require('../../core/slash');
+const { loc } = require('../../core/slash');
 const ui = require('../../core/ui');
 const args = require('../../core/args');
 const social = require('../../features/social');
@@ -12,13 +12,13 @@ const LABELS = {
   wave: ['Wave', 'Saludar'], poke: ['Poke', 'Picar la mejilla'], tickle: ['Tickle', 'Hacer cosquillas'], feed: ['Feed', 'Dar de comer'],
   wink: ['Wink', 'Guiñar el ojo'], stare: ['Stare', 'Mirar fijamente'], handshake: ['Handshake', 'Estrechar la mano'],
   baka: ['Baka!', '¡Baka!'], bite: ['Nibble', 'Mordisquear'], slap: ['Slap', 'Cachetada'], kick: ['Little kick', 'Patadita'],
-  yeet: ['Yeet', 'Lanzar por los aires'],
+  yeet: ['Yeet', 'Lanzar por los aires'], bonk: ['Bonk!', '¡Bonk!'], punch: ['Anime punch', 'Puñetazo de anime'],
+  glomp: ['Glomp (jump hug)', 'Abrazo con salto'], carry: ['Carry in your arms', 'Cargar en brazos'], kabedon: ['Kabedon', 'Kabedon'],
+  lappillow: ['Lap pillow', 'Regazo para la siesta'], blowkiss: ['Blow a kiss', 'Beso volado'],
 };
 
-const choices = Object.keys(social.ACTIONS).map(key => choice(key, LABELS[key][0], LABELS[key][1]));
-
 const data = loc(new SlashCommandBuilder(), ['interact', 'interactuar'], ['Hug, pat, high-five… someone, with an anime GIF', 'Abraza, acaricia, choca los cinco… a alguien, con un GIF de anime'])
-  .addStringOption(opt => loc(opt, ['action', 'acción'], ['What to do', 'Qué hacer']).setRequired(true).addChoices(...choices))
+  .addStringOption(opt => loc(opt, ['action', 'acción'], ['What to do (start typing: hug, bonk, kabedon…)', 'Qué hacer (escribe: abrazo, bonk, kabedon…)']).setRequired(true).setAutocomplete(true))
   .addUserOption(opt => loc(opt, ['user', 'usuario'], ['Who', 'A quién']).setRequired(true));
 
 module.exports = {
@@ -36,6 +36,13 @@ module.exports = {
       return { options: { action: type, user: target } };
     },
   },
+
+  autocomplete(interaction, locale) {
+    const index = locale === 'es' ? 1 : 0;
+    return social.choices(social.ACTIONS, key => `${LABELS[key]?.[index] ?? key}`, interaction.options.getFocused());
+  },
+
+  LABELS,
 
   async run(ctx) {
     const action = ctx.opt.string('action');

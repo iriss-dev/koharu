@@ -208,7 +208,7 @@ describe('every command runs and produces a valid Discord message', () => {
     const self = await run(w, { commandName: 'pay', options: { user: w.iris, amount: '10' } });
     assert.match(textOf(self.reply), /propia cuenta/);
     const balance = await run(w, { commandName: 'balance' });
-    assert.equal(balance.reply.files.length, 1);
+    assert.equal(balance.reply.files.length, 0, 'no big decorative picture: a small GIF or the avatar');
     const depositAll = customIdsOf(balance.reply).find(id => id.startsWith('kh:eco:depall'));
     await press(w, { customId: depositAll });
     assert.equal(db.member(w.guild.id, IRIS).coins, 0);

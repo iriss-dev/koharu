@@ -8,7 +8,8 @@
 const ui = require('../../core/ui');
 const router = require('../../core/router');
 const { register, t } = require('../../core/i18n');
-const nekos = require('../../services/nekos');
+const kawaii = require('../../services/kawaii');
+const { fold } = require('../../utils/text');
 const db = require('../../database/db');
 const { escapeMarkdown } = require('../../utils/text');
 
@@ -33,6 +34,13 @@ const ACTIONS = {
   slap: { emoji: 'warn', aliases: ['slap', 'cachetada', 'bofetada'], es: ['cachetada', 'cachetadas', '{a} le da una cachetada a {b}'], en: ['slap', 'slaps', '{a} slaps {b}'] },
   kick: { emoji: 'warn', aliases: ['patada', 'patear', 'patadita'], es: ['patada', 'patadas', '{a} le da una patadita a {b}'], en: ['kick', 'kicks', '{a} kicks {b}'] },
   yeet: { emoji: 'fire', aliases: ['yeet', 'lanzar'], es: ['lanzamiento', 'lanzamientos', '{a} lanza a {b} por los aires'], en: ['yeet', 'yeets', '{a} yeets {b}'] },
+  bonk: { emoji: 'warn', aliases: ['bonk', 'golpecito'], es: ['bonk', 'bonks', '{a} le da un ¡bonk! a {b}'], en: ['bonk', 'bonks', '{a} bonks {b}'] },
+  punch: { emoji: 'fire', aliases: ['punch', 'puñetazo', 'golpear'], es: ['puñetazo', 'puñetazos', '{a} le da un puñetazo de anime a {b}'], en: ['punch', 'punches', '{a} punches {b}'] },
+  glomp: { emoji: 'hearts', aliases: ['glomp', 'abrazote', 'tacleada'], es: ['abrazo con salto', 'abrazos con salto', '{a} se lanza a abrazar a {b}'], en: ['glomp', 'glomps', '{a} glomps {b}'] },
+  carry: { emoji: 'sparkle', aliases: ['carry', 'cargar', 'enbrazos'], es: ['viaje en brazos', 'viajes en brazos', '{a} carga a {b} en brazos'], en: ['carry', 'carries', '{a} carries {b}'] },
+  kabedon: { emoji: 'heart', aliases: ['kabedon'], es: ['kabedon', 'kabedones', '{a} le hace un kabedon a {b}'], en: ['kabedon', 'kabedons', '{a} kabedons {b}'] },
+  lappillow: { emoji: 'moon', aliases: ['lappillow', 'regazo'], es: ['siesta en el regazo', 'siestas en el regazo', '{a} deja que {b} descanse en su regazo'], en: ['lap pillow', 'lap pillows', '{a} gives {b} a lap pillow'] },
+  blowkiss: { emoji: 'heart', aliases: ['blowkiss', 'besovolado'], es: ['beso volado', 'besos volados', '{a} le manda un beso volado a {b}'], en: ['blown kiss', 'blown kisses', '{a} blows {b} a kiss'] },
 };
 
 // Solo reactions: es/en sentence with {a}.
@@ -57,6 +65,20 @@ const REACTIONS = {
   thumbsup: { emoji: 'check', aliases: ['thumbsup', 'like', 'pulgar'], es: '{a} da su aprobación', en: '{a} gives a thumbs up' },
   lurk: { emoji: 'cat', aliases: ['lurk', 'espiar'], es: '{a} observa desde las sombras', en: '{a} is lurking' },
   run: { emoji: 'fire', aliases: ['run', 'correr', 'huir'], es: '{a} sale corriendo', en: '{a} runs away' },
+  clap: { emoji: 'sparkle', aliases: ['clap', 'aplaudir', 'aplausos'], es: '{a} aplaude', en: '{a} claps' },
+  confused: { emoji: 'help', aliases: ['confused', 'confundido', 'confundida'], es: '{a} no entiende nada', en: '{a} is confused' },
+  sip: { emoji: 'coffee', aliases: ['sip', 'tecito', 'sorbito'], es: '{a} toma un sorbito de té', en: '{a} sips some tea' },
+  wag: { emoji: 'paw', aliases: ['wag', 'colita'], es: '{a} mueve la colita', en: '{a} wags their tail' },
+  teehee: { emoji: 'star', aliases: ['teehee', 'jiji'], es: '{a} se ríe bajito: ¡jiji!', en: '{a} giggles: teehee!' },
+  shocked: { emoji: 'warn', aliases: ['shocked', 'sorpresa', 'shock'], es: '{a} no lo puede creer', en: '{a} is shocked' },
+  bleh: { emoji: 'strawberry', aliases: ['bleh', 'lengua'], es: '{a} saca la lengua', en: '{a} sticks their tongue out' },
+  nya: { emoji: 'cat', aliases: ['nya', 'miau'], es: '{a} dice ¡nya~!', en: '{a} goes nya~!' },
+  angry: { emoji: 'fire', aliases: ['angry', 'enojo', 'enojar'], es: '{a} se enoja', en: '{a} is angry' },
+  spin: { emoji: 'shuffle', aliases: ['spin', 'girar', 'vueltas'], es: '{a} da vueltas y vueltas', en: '{a} spins around' },
+  salute: { emoji: 'star', aliases: ['salute', 'firmes'], es: '{a} hace un saludo', en: '{a} salutes' },
+  tableflip: { emoji: 'fire', aliases: ['tableflip', 'voltearmesa'], es: '{a} voltea la mesa (╯°□°)╯︵ ┻━┻', en: '{a} flips the table (╯°□°)╯︵ ┻━┻' },
+  awoo: { emoji: 'moon', aliases: ['awoo', 'aullar'], es: '{a} hace ¡awoo!', en: '{a} goes awoo!' },
+  cringe: { emoji: 'cross', aliases: ['cringe', 'verguenza'], es: '{a} siente vergüenza ajena', en: '{a} cringes' },
 };
 
 register('social', {
@@ -110,7 +132,7 @@ async function actionMessage({ locale, action, actor, target, guildId, botId, re
   let count = null;
   if (guildId && !isSelf) count = db.recordInteraction(guildId, from.id, to.id, action);
 
-  const gif = await nekos.gif(action);
+  const gif = await kawaii.gif(action).catch(() => null);
   const subs = [];
   if (isSelf) subs.push(t(locale, 'social.selfNote'));
   else if (target.id === botId) subs.push(t(locale, 'social.botNote'));
@@ -139,7 +161,7 @@ async function actionMessage({ locale, action, actor, target, guildId, botId, re
 
 async function reactionMessage({ locale, reaction, actor }) {
   const def = REACTIONS[reaction];
-  const gif = await nekos.gif(reaction);
+  const gif = await kawaii.gif(reaction).catch(() => null);
   const body = [ui.heading(def.emoji, def[locale].replace('{a}', bold(actor.name)))];
   if (gif) body.push(ui.gallery({ url: gif.url, description: def[locale].replace('{a}', actor.name) }));
   if (gif?.anime) body.push(ui.sub(t(locale, 'social.animeFrom', { anime: gif.anime })));
@@ -175,4 +197,18 @@ function presets(table) {
   return out;
 }
 
-module.exports = { ACTIONS, REACTIONS, actionMessage, reactionMessage, presets };
+/**
+ * Autocomplete entries for /interact and /react: every action fits, not just 25 fixed choices.
+ * @param {object} table ACTIONS or REACTIONS
+ * @param {(key: string, def: object) => string} label
+ */
+function choices(table, label, query) {
+  const q = fold(query ?? '');
+  return Object.entries(table)
+    .map(([key, def]) => ({ key, name: label(key, def), def }))
+    .filter(({ key, name, def }) => !q || fold(name).includes(q) || key.includes(q) || def.aliases.some(alias => fold(alias).startsWith(q)))
+    .slice(0, 25)
+    .map(({ key, name }) => ({ name: name.slice(0, 100), value: key }));
+}
+
+module.exports = { ACTIONS, REACTIONS, actionMessage, reactionMessage, presets, choices };
